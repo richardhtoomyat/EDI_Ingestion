@@ -47,11 +47,13 @@ export const SFTP_FIELDS = [
 
 const blank = (fields) => Object.fromEntries(fields.map((f) => [f.name, '']))
 
+const party = () => ({ ...blank(PARTY_FIELDS), accountSystem: '' })
+
 export const initialState = () => ({
   type: 'New',
   services: [],
-  mainAccount: blank(PARTY_FIELDS),
-  logisticsProvider: blank(PARTY_FIELDS),
+  mainAccount: party(),
+  logisticsProvider: party(),
   additionalLocations: '',
   paymentHouse: { companyName: '', contactName: '' },
   developer: blank(DEVELOPER_FIELDS),

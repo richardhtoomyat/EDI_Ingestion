@@ -13,8 +13,7 @@ body { margin: 0; background: #fff; font-size: 16px; line-height: 1.5; }
 /* header / footer */
 .site-header { background: #fff; border-bottom: 1px solid var(--line); }
 .site-header-inner { max-width: 1100px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 20px; }
-.wordmark { font-weight: 700; font-size: 1.05rem; line-height: .95; letter-spacing: -.02em; }
-.wordmark i { color: var(--orange); font-style: normal; font-size: .75em; vertical-align: top; }
+.logo { height: 36px; width: auto; display: block; }
 .site-title { margin-left: auto; font-weight: 500; color: var(--grey); font-size: .9rem; }
 .site-footer { background: var(--black); color: #fff; padding: 28px 20px; text-align: center; font-size: .85rem; }
 .site-footer p { margin: 4px 0; }

@@ -1,7 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   SERVICES, PARTY_FIELDS, DEVELOPER_FIELDS, TRANSACTION_SETS, SFTP_FIELDS, initialState,
 } from './formConfig.js'
+import logo from './assets/logo.png'
+
+const ACCOUNT_SYSTEMS = ['TruckMate', 'AS400']
 
 const EDI_EMAIL = 'edirequest@dayandrossinc.ca'
 
@@ -9,7 +12,7 @@ function SiteHeader() {
   return (
     <header className="site-header no-print">
       <div className="site-header-inner">
-        <span className="wordmark" aria-label="Day &amp; Ross">DAY<i>&amp;</i><br />ROSS</span>
+        <img className="logo" src={logo} alt="Day &amp; Ross" />
         <span className="site-title">EDI Customer Onboarding</span>
       </div>
     </header>
@@ -53,12 +56,102 @@ function Fields({ fields, values, onChange, errors = {}, prefix }) {
   ))
 }
 
+function padAs400(value) {
+  const core = String(value).replace(/^0+/, '').slice(0, 7)
+  return core ? core.padStart(7, '0') : ''
+}
+
+function AccountNumberField({ id, value, system, onValue, error }) {
+  const ref = useRef(null)
+  const placeCaret = () => {
+    const el = ref.current
+    if (!el || system !== 'AS400') return
+    requestAnimationFrame(() => {
+      const pos = el.value.length
+      el.setSelectionRange(pos, pos)
+    })
+  }
+  return (
+    <label className={`field${error ? ' has-error' : ''}`} htmlFor={id}>
+      <span>Account # <b className="req"> *</b></span>
+      <input
+        ref={ref}
+        id={id}
+        value={value}
+        autoComplete="off"
+        placeholder={system === 'AS400' ? '0000000' : undefined}
+        onFocus={placeCaret}
+        onKeyDown={(e) => {
+          if (system !== 'AS400' || e.metaKey || e.ctrlKey || e.altKey) return
+          if (e.key === 'Backspace') {
+            e.preventDefault()
+            const core = value.replace(/^0+/, '').slice(0, -1)
+            onValue(core ? core.padStart(7, '0') : '')
+            placeCaret()
+          } else if (e.key === 'Delete') {
+            e.preventDefault()
+            onValue('')
+          } else if (e.key.length === 1) {
+            e.preventDefault()
+            onValue(padAs400(value.replace(/^0+/, '') + e.key))
+            placeCaret()
+          }
+        }}
+        onPaste={(e) => {
+          if (system !== 'AS400') return
+          e.preventDefault()
+          const text = e.clipboardData.getData('text')
+          const el = e.currentTarget
+          const replaceAll = el.selectionStart === 0 && el.selectionEnd === el.value.length
+          const base = replaceAll ? '' : value.replace(/^0+/, '')
+          const core = (base + text).replace(/^0+/, '').slice(0, 7)
+          onValue(core ? core.padStart(7, '0') : '')
+          placeCaret()
+        }}
+        onChange={(e) => onValue(system === 'AS400' ? padAs400(e.target.value) : e.target.value)}
+      />
+      {error && <em role="alert">{error}</em>}
+    </label>
+  )
+}
+
+function PartyColumn({ title, prefix, values, onChange, errors }) {
+  const rest = PARTY_FIELDS.filter((f) => f.name !== 'accountNumber')
+  const chooseSystem = (system) => {
+    onChange('accountSystem', system)
+    onChange('accountNumber', system === 'AS400' ? padAs400(values.accountNumber) : values.accountNumber.replace(/^0+/, ''))
+  }
+  return (
+    <div>
+      <h3>{title}</h3>
+      <AccountNumberField id={`${prefix}-accountNumber`} value={values.accountNumber} system={values.accountSystem} onValue={(v) => onChange('accountNumber', v)} error={errors.accountNumber} />
+      <fieldset className={errors.accountSystem ? 'group-error' : ''}>
+        <legend>Is this account # TruckMate or AS400? <b className="req">*</b></legend>
+        {ACCOUNT_SYSTEMS.map((system) => (
+          <label key={system} className="inline">
+            <input type="radio" name={`${prefix}-accountSystem`} checked={values.accountSystem === system} onChange={() => chooseSystem(system)} /> {system}
+          </label>
+        ))}
+        {errors.accountSystem && <em role="alert">{errors.accountSystem}</em>}
+      </fieldset>
+      <Fields prefix={prefix} fields={rest} values={values} onChange={onChange} errors={errors} />
+    </div>
+  )
+}
+
 function validate(s) {
   const e = { mainAccount: {}, logisticsProvider: {}, developer: {}, authorization: {}, other: {} }
   const need = (group, key, v) => { if (!String(v).trim()) e[group][key] = 'Required' }
   for (const f of PARTY_FIELDS.filter((f) => f.required)) {
     need('mainAccount', f.name, s.mainAccount[f.name])
     need('logisticsProvider', f.name, s.logisticsProvider[f.name])
+  }
+  need('mainAccount', 'accountSystem', s.mainAccount.accountSystem)
+  need('logisticsProvider', 'accountSystem', s.logisticsProvider.accountSystem)
+  for (const group of ['mainAccount', 'logisticsProvider']) {
+    if (s[group].accountSystem === 'AS400' && s[group].accountNumber && s[group].accountNumber.length !== 7) {
+      e[group].accountNumber = 'AS400 account # must be 7 characters'
+    }
   }
   need('developer', 'developerName', s.developer.developerName)
   need('authorization', 'name', s.authorization.name)
@@ -76,13 +169,17 @@ const hasErrors = (e) => Object.values(e).some((g) => Object.keys(g).length)
 function Summary({ state, onEdit }) {
   const sets = (key) => TRANSACTION_SETS.filter((t) => state.sets[key].includes(t.code)).map((t) => t.code).join(', ') || '—'
   const row = (k, v) => <tr key={k}><th>{k}</th><td>{v || '—'}</td></tr>
-  const party = (p) => PARTY_FIELDS.map((f) => row(f.label, p[f.name]))
+  const party = (p) => PARTY_FIELDS.flatMap((f) => (
+    f.name === 'accountNumber'
+      ? [row(f.label, p[f.name]), row('Account system', p.accountSystem)]
+      : [row(f.label, p[f.name])]
+  ))
   const { password, ...sftpSafe } = state.sftpDetails
   const mailBody = [
     `EDI Setup Request (${state.type})`,
     `Services: ${state.services.map((v) => SERVICES.find((x) => x.value === v).label).join('; ')}`,
-    `Main account: ${state.mainAccount.companyName} (#${state.mainAccount.accountNumber})`,
-    `Logistics provider: ${state.logisticsProvider.companyName} (#${state.logisticsProvider.accountNumber})`,
+    `Main account: ${state.mainAccount.companyName} (#${state.mainAccount.accountNumber}, ${state.mainAccount.accountSystem})`,
+    `Logistics provider: ${state.logisticsProvider.companyName} (#${state.logisticsProvider.accountNumber}, ${state.logisticsProvider.accountSystem})`,
     `D&R provides specs: ${sets('dayRoss')}`,
     `Customer provides specs: ${sets('customer')}`,
     `Communication: ${[state.as2 && 'AS2', state.sftp && 'SFTP'].filter(Boolean).join(', ')}`,
@@ -163,7 +260,6 @@ export default function App() {
       <div className="hero-inner">
         <h1>Delivering what drives you.</h1>
         <p className="hero-sub">Electronic Data Interchange (EDI) Form</p>
-        <p>LTL/TL (Freight) • Commerce Solutions (Sameday Worldwide) • EDI Setup Authorization</p>
       </div>
     </section>
     <main className="page">
@@ -192,8 +288,8 @@ export default function App() {
         <section className="card">
           <h2>Main Account, Locations, Logistics &amp; Contact Information</h2>
           <div className="cols">
-            <div><h3>Main Account</h3><Fields prefix="main" fields={PARTY_FIELDS} values={state.mainAccount} onChange={setGroup('mainAccount')} errors={err('mainAccount')} /></div>
-            <div><h3>Logistics Provider</h3><Fields prefix="lp" fields={PARTY_FIELDS} values={state.logisticsProvider} onChange={setGroup('logisticsProvider')} errors={err('logisticsProvider')} /></div>
+            <PartyColumn title="Main Account" prefix="main" values={state.mainAccount} onChange={setGroup('mainAccount')} errors={err('mainAccount')} />
+            <PartyColumn title="Logistics Provider" prefix="lp" values={state.logisticsProvider} onChange={setGroup('logisticsProvider')} errors={err('logisticsProvider')} />
           </div>
           <div className="cols">
             <div>
