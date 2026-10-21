@@ -5,6 +5,32 @@ import {
 
 const EDI_EMAIL = 'edirequest@dayandrossinc.ca'
 
+function SiteHeader() {
+  return (
+    <header className="site-header no-print">
+      <div className="site-header-inner">
+        <span className="wordmark" aria-label="Day &amp; Ross">DAY<i>&amp;</i><br />ROSS</span>
+        <span className="site-title">EDI Customer Onboarding</span>
+      </div>
+    </header>
+  )
+}
+
+function SiteFooter() {
+  return (
+    <footer className="site-footer no-print">
+      <p>Questions? Contact <a href={`mailto:${EDI_EMAIL}`}>{EDI_EMAIL}</a></p>
+      <p>© Day &amp; Ross. All rights reserved.</p>
+    </footer>
+  )
+}
+
+function Shell({ children }) {
+  return (<><SiteHeader />{children}<SiteFooter /></>)
+}
+
+const Chevron = () => <span className="chev" aria-hidden="true">›</span>
+
 function Field({ field, value, onChange, error, id }) {
   return (
     <label className={`field${error ? ' has-error' : ''}`} htmlFor={id}>
@@ -66,11 +92,12 @@ function Summary({ state, onEdit }) {
   ].filter(Boolean).join('\n')
 
   return (
+    <Shell>
     <main className="page">
       <div className="banner ok">Form complete. Review, then print/save as PDF or email it to Day &amp; Ross.</div>
       <div className="actions no-print">
-        <button onClick={() => window.print()}>Print / Save as PDF</button>
-        <a className="btn" href={`mailto:${EDI_EMAIL}?subject=${encodeURIComponent(`EDI Setup – ${state.mainAccount.companyName}`)}&body=${encodeURIComponent(mailBody)}`}>Email to {EDI_EMAIL}</a>
+        <button onClick={() => window.print()}>Print / Save as PDF <Chevron /></button>
+        <a className="btn" href={`mailto:${EDI_EMAIL}?subject=${encodeURIComponent(`EDI Setup – ${state.mainAccount.companyName}`)}&body=${encodeURIComponent(mailBody)}`}>Email to {EDI_EMAIL} <Chevron /></a>
         <button className="secondary" onClick={onEdit}>Edit form</button>
       </div>
       <section className="card"><h2>Request</h2><table><tbody>
@@ -103,6 +130,7 @@ function Summary({ state, onEdit }) {
         {row('Date', state.authorization.date)}
       </tbody></table></section>
     </main>
+    </Shell>
   )
 }
 
@@ -130,12 +158,16 @@ export default function App() {
   if (done) return <Summary state={state} onEdit={() => setDone(false)} />
 
   return (
+    <Shell>
+    <section className="hero">
+      <div className="hero-inner">
+        <h1>Delivering what drives you.</h1>
+        <p className="hero-sub">Electronic Data Interchange (EDI) Form</p>
+        <p>LTL/TL (Freight) • Commerce Solutions (Sameday Worldwide) • EDI Setup Authorization</p>
+      </div>
+    </section>
     <main className="page">
-      <header className="hero">
-        <h1>Electronic Data Interchange (EDI) Form</h1>
-        <p>Day &amp; Ross • LTL/TL (Freight) • Commerce Solutions (Sameday Worldwide) • EDI Setup Authorization</p>
-        <p>Please complete all required fields marked with an asterisk (<b className="req">*</b>) before you submit the form. Thank you.</p>
-      </header>
+      <p className="intro">Please complete all required fields marked with an asterisk (<b className="req">*</b>) before you submit the form. Thank you.</p>
 
       <form onSubmit={submit} noValidate>
         {errors && hasErrors(errors) && <div className="banner err" role="alert">Please fix the highlighted fields below.</div>}
@@ -227,8 +259,9 @@ export default function App() {
           </label>
         </section>
 
-        <div className="actions"><button type="submit">Review &amp; Submit</button></div>
+        <div className="actions"><button type="submit">Review &amp; Submit <Chevron /></button></div>
       </form>
     </main>
+    </Shell>
   )
 }
