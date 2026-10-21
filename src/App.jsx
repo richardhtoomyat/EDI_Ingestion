@@ -1,0 +1,234 @@
+import { useState } from 'react'
+import {
+  SERVICES, PARTY_FIELDS, DEVELOPER_FIELDS, TRANSACTION_SETS, SFTP_FIELDS, initialState,
+} from './formConfig.js'
+
+const EDI_EMAIL = 'edirequest@dayandrossinc.ca'
+
+function Field({ field, value, onChange, error, id }) {
+  return (
+    <label className={`field${error ? ' has-error' : ''}`} htmlFor={id}>
+      <span>{field.label}{field.required && <b className="req"> *</b>}</span>
+      <input
+        id={id}
+        type={field.type || 'text'}
+        value={value}
+        autoComplete="off"
+        onChange={(e) => onChange(field.name, e.target.value)}
+      />
+      {error && <em role="alert">{error}</em>}
+    </label>
+  )
+}
+
+function Fields({ fields, values, onChange, errors = {}, prefix }) {
+  return fields.map((f) => (
+    <Field key={f.name} id={`${prefix}-${f.name}`} field={f} value={values[f.name]} onChange={onChange} error={errors[f.name]} />
+  ))
+}
+
+function validate(s) {
+  const e = { mainAccount: {}, logisticsProvider: {}, developer: {}, authorization: {}, other: {} }
+  const need = (group, key, v) => { if (!String(v).trim()) e[group][key] = 'Required' }
+  for (const f of PARTY_FIELDS.filter((f) => f.required)) {
+    need('mainAccount', f.name, s.mainAccount[f.name])
+    need('logisticsProvider', f.name, s.logisticsProvider[f.name])
+  }
+  need('developer', 'developerName', s.developer.developerName)
+  need('authorization', 'name', s.authorization.name)
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  for (const [g, vals] of [['mainAccount', s.mainAccount], ['logisticsProvider', s.logisticsProvider], ['developer', s.developer]]) {
+    if (vals.email && !emailRe.test(vals.email) && vals.email.toUpperCase() !== 'N/A') e[g].email = 'Enter a valid email'
+  }
+  if (s.services.length === 0) e.other.services = 'Select at least one service'
+  if (!s.as2 && !s.sftp) e.other.comm = 'Select a communication method'
+  return e
+}
+
+const hasErrors = (e) => Object.values(e).some((g) => Object.keys(g).length)
+
+function Summary({ state, onEdit }) {
+  const sets = (key) => TRANSACTION_SETS.filter((t) => state.sets[key].includes(t.code)).map((t) => t.code).join(', ') || '—'
+  const row = (k, v) => <tr key={k}><th>{k}</th><td>{v || '—'}</td></tr>
+  const party = (p) => PARTY_FIELDS.map((f) => row(f.label, p[f.name]))
+  const { password, ...sftpSafe } = state.sftpDetails
+  const mailBody = [
+    `EDI Setup Request (${state.type})`,
+    `Services: ${state.services.map((v) => SERVICES.find((x) => x.value === v).label).join('; ')}`,
+    `Main account: ${state.mainAccount.companyName} (#${state.mainAccount.accountNumber})`,
+    `Logistics provider: ${state.logisticsProvider.companyName} (#${state.logisticsProvider.accountNumber})`,
+    `D&R provides specs: ${sets('dayRoss')}`,
+    `Customer provides specs: ${sets('customer')}`,
+    `Communication: ${[state.as2 && 'AS2', state.sftp && 'SFTP'].filter(Boolean).join(', ')}`,
+    state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
+    `Completed by: ${state.authorization.name}, ${state.authorization.title}, ${state.authorization.company} on ${state.authorization.date}`,
+    '(SFTP password intentionally omitted - share it securely.)',
+  ].filter(Boolean).join('\n')
+
+  return (
+    <main className="page">
+      <div className="banner ok">Form complete. Review, then print/save as PDF or email it to Day &amp; Ross.</div>
+      <div className="actions no-print">
+        <button onClick={() => window.print()}>Print / Save as PDF</button>
+        <a className="btn" href={`mailto:${EDI_EMAIL}?subject=${encodeURIComponent(`EDI Setup – ${state.mainAccount.companyName}`)}&body=${encodeURIComponent(mailBody)}`}>Email to {EDI_EMAIL}</a>
+        <button className="secondary" onClick={onEdit}>Edit form</button>
+      </div>
+      <section className="card"><h2>Request</h2><table><tbody>
+        {row('Type', state.type)}
+        {row('Service', state.services.map((v) => SERVICES.find((x) => x.value === v).label).join('; '))}
+      </tbody></table></section>
+      <section className="card"><h2>Main Account</h2><table><tbody>{party(state.mainAccount)}</tbody></table></section>
+      <section className="card"><h2>Logistics Provider</h2><table><tbody>{party(state.logisticsProvider)}</tbody></table></section>
+      <section className="card"><h2>Additional Locations / Payment House</h2><table><tbody>
+        {row('Additional locations', state.additionalLocations)}
+        {row('Payment house company', state.paymentHouse.companyName)}
+        {row('Payment house contact', state.paymentHouse.contactName)}
+      </tbody></table></section>
+      <section className="card"><h2>EDI Technical Contact</h2><table><tbody>{DEVELOPER_FIELDS.map((f) => row(f.label, state.developer[f.name]))}</tbody></table></section>
+      <section className="card"><h2>Transaction Sets (ANSI X12, 4010)</h2><table><tbody>
+        {row('Day & Ross provides specs', sets('dayRoss'))}
+        {row('Customer provides specs', sets('customer'))}
+      </tbody></table></section>
+      <section className="card"><h2>Communication</h2><table><tbody>
+        {row('AS2', state.as2 ? 'Yes (billable setup charge applies)' : 'No')}
+        {row('SFTP', state.sftp ? 'Yes' : 'No')}
+        {state.sftp && SFTP_FIELDS.map((f) => row(f.label, f.name === 'password' ? '••••••••' : state.sftpDetails[f.name]))}
+      </tbody></table></section>
+      <section className="card"><h2>Authorization</h2><table><tbody>
+        {row('Completed by', state.authorization.name)}
+        {row('Title', state.authorization.title)}
+        {row('Company', state.authorization.company)}
+        {row('Payment house authorized for API/EDI & other services', state.authorization.paymentHouseAuth)}
+        {row('Comments', state.authorization.comments)}
+        {row('Date', state.authorization.date)}
+      </tbody></table></section>
+    </main>
+  )
+}
+
+export default function App() {
+  const [state, setState] = useState(initialState)
+  const [errors, setErrors] = useState(null)
+  const [done, setDone] = useState(false)
+
+  const setGroup = (group) => (name, value) => setState((s) => ({ ...s, [group]: { ...s[group], [name]: value } }))
+  const toggle = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
+  const err = (g) => (errors && errors[g]) || {}
+
+  const submit = (ev) => {
+    ev.preventDefault()
+    const e = validate(state)
+    setErrors(e)
+    if (hasErrors(e)) {
+      setTimeout(() => document.querySelector('.has-error, .group-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
+      return
+    }
+    setDone(true)
+    window.scrollTo(0, 0)
+  }
+
+  if (done) return <Summary state={state} onEdit={() => setDone(false)} />
+
+  return (
+    <main className="page">
+      <header className="hero">
+        <h1>Electronic Data Interchange (EDI) Form</h1>
+        <p>Day &amp; Ross • LTL/TL (Freight) • Commerce Solutions (Sameday Worldwide) • EDI Setup Authorization</p>
+        <p>Please complete all required fields marked with an asterisk (<b className="req">*</b>) before you submit the form. Thank you.</p>
+      </header>
+
+      <form onSubmit={submit} noValidate>
+        {errors && hasErrors(errors) && <div className="banner err" role="alert">Please fix the highlighted fields below.</div>}
+
+        <section className="card">
+          <h2>Request</h2>
+          <div className="row">
+            <fieldset><legend>Type</legend>
+              {['New', 'Revised'].map((t) => (
+                <label key={t} className="inline"><input type="radio" name="type" checked={state.type === t} onChange={() => setState((s) => ({ ...s, type: t }))} /> {t}</label>
+              ))}
+            </fieldset>
+            <fieldset className={err('other').services ? 'group-error' : ''}><legend>Service</legend>
+              {SERVICES.map((sv) => (
+                <label key={sv.value} className="inline"><input type="checkbox" checked={state.services.includes(sv.value)} onChange={() => setState((s) => ({ ...s, services: toggle(s.services, sv.value) }))} /> {sv.label}</label>
+              ))}
+              {err('other').services && <em role="alert">{err('other').services}</em>}
+            </fieldset>
+          </div>
+        </section>
+
+        <section className="card">
+          <h2>Main Account, Locations, Logistics &amp; Contact Information</h2>
+          <div className="cols">
+            <div><h3>Main Account</h3><Fields prefix="main" fields={PARTY_FIELDS} values={state.mainAccount} onChange={setGroup('mainAccount')} errors={err('mainAccount')} /></div>
+            <div><h3>Logistics Provider</h3><Fields prefix="lp" fields={PARTY_FIELDS} values={state.logisticsProvider} onChange={setGroup('logisticsProvider')} errors={err('logisticsProvider')} /></div>
+          </div>
+          <div className="cols">
+            <div>
+              <h3>Additional Locations</h3>
+              <label className="field"><span>Indicate Account # or Name &amp; Address</span>
+                <textarea rows={4} value={state.additionalLocations} onChange={(e) => setState((s) => ({ ...s, additionalLocations: e.target.value }))} />
+              </label>
+              <h3>Payment House</h3>
+              <Fields prefix="ph" fields={[{ name: 'companyName', label: 'Company Name' }, { name: 'contactName', label: 'Contact Name' }]} values={state.paymentHouse} onChange={setGroup('paymentHouse')} />
+            </div>
+            <div><h3>EDI Technical Contact</h3><Fields prefix="dev" fields={DEVELOPER_FIELDS} values={state.developer} onChange={setGroup('developer')} errors={err('developer')} /></div>
+          </div>
+        </section>
+
+        <section className="card">
+          <h2>Transaction Sets <small>ANSI X12, Version 4010 (check the appropriate boxes)</small></h2>
+          <div className="cols">
+            {[['dayRoss', 'Day & Ross to provide specs'], ['customer', 'Customer to provide specs']].map(([key, title]) => (
+              <div key={key}>
+                <h3>{title}</h3>
+                {TRANSACTION_SETS.filter((t) => t[key]).map((t) => (
+                  <label key={t.code} className="inline block">
+                    <input type="checkbox" checked={state.sets[key].includes(t.code)} onChange={() => setState((s) => ({ ...s, sets: { ...s.sets, [key]: toggle(s.sets[key], t.code) } }))} />
+                    <span><b>{t.code}</b> {t.name}</span>
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={`card${err('other').comm ? ' group-error' : ''}`}>
+          <h2>Communication Methods <small>(check the appropriate boxes)</small></h2>
+          <label className="inline block"><input type="checkbox" checked={state.as2} onChange={(e) => setState((s) => ({ ...s, as2: e.target.checked }))} /> <span><b>AS2</b> <i>* There is a billable charge for setting up AS2</i></span></label>
+          <label className="inline block"><input type="checkbox" checked={state.sftp} onChange={(e) => setState((s) => ({ ...s, sftp: e.target.checked }))} /> <b>SFTP</b></label>
+          {err('other').comm && <em role="alert">{err('other').comm}</em>}
+          {state.sftp && (
+            <div className="cols sub">
+              <Fields prefix="sftp" fields={SFTP_FIELDS} values={state.sftpDetails} onChange={setGroup('sftpDetails')} />
+            </div>
+          )}
+        </section>
+
+        <section className="card">
+          <h2>Authorization</h2>
+          <div className="cols">
+            <Fields prefix="auth" fields={[
+              { name: 'name', label: 'Name of person completing this form', required: true },
+              { name: 'title', label: 'Title' },
+              { name: 'company', label: 'Company' },
+            ]} values={state.authorization} onChange={setGroup('authorization')} errors={err('authorization')} />
+            <label className="field"><span>Date</span>
+              <input type="date" value={state.authorization.date} onChange={(e) => setGroup('authorization')('date', e.target.value)} />
+            </label>
+          </div>
+          <fieldset><legend>Do you give authorization for your payment house to be set up on API/EDI and any other services Day &amp; Ross offers to get backup documents?</legend>
+            {['YES', 'NO'].map((v) => (
+              <label key={v} className="inline"><input type="radio" name="phauth" checked={state.authorization.paymentHouseAuth === v} onChange={() => setGroup('authorization')('paymentHouseAuth', v)} /> {v}</label>
+            ))}
+          </fieldset>
+          <label className="field"><span>Comments</span>
+            <textarea rows={3} value={state.authorization.comments} onChange={(e) => setGroup('authorization')('comments', e.target.value)} />
+          </label>
+        </section>
+
+        <div className="actions"><button type="submit">Review &amp; Submit</button></div>
+      </form>
+    </main>
+  )
+}
