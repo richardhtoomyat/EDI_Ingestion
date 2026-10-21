@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   SERVICES, PARTY_FIELDS, DEVELOPER_FIELDS, TRANSACTION_SETS, SFTP_FIELDS, initialState,
 } from './formConfig.js'
@@ -235,10 +235,103 @@ export default function App() {
   const [state, setState] = useState(initialState)
   const [errors, setErrors] = useState(null)
   const [done, setDone] = useState(false)
+  const [sftpTest, setSftpTest] = useState({ phase: 'idle', ok: false, message: '' })
+  const sftpTarget = useRef({ server: '', port: '' })
+  const pollRef = useRef(null)
 
   const setGroup = (group) => (name, value) => setState((s) => ({ ...s, [group]: { ...s[group], [name]: value } }))
   const toggle = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
   const err = (g) => (errors && errors[g]) || {}
+
+  sftpTarget.current = {
+    server: state.sftpDetails.server.trim(),
+    port: state.sftpDetails.port.trim(),
+  }
+  const sftpReady = ['server', 'port', 'username', 'password', 'directories'].every((name) => String(state.sftpDetails[name] || '').trim())
+  const stopOutboundWatch = () => {
+    clearInterval(pollRef.current)
+    pollRef.current = null
+  }
+  useEffect(() => () => stopOutboundWatch(), [])
+  useEffect(() => { if (!state.sftp) stopOutboundWatch() }, [state.sftp])
+
+  const postSftp = async (action) => {
+    const res = await fetch('/api/test-sftp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...sftpTarget.current, action }),
+    })
+    return res.json()
+  }
+  const watchOutbound = () => {
+    stopOutboundWatch()
+    pollRef.current = setInterval(async () => {
+      try {
+        const data = await postSftp('check-outbound')
+        if (!data.ok) {
+          stopOutboundWatch()
+          setSftpTest({ phase: 'connected', ok: false, message: data.error || 'Lost the SFTP connection.' })
+          return
+        }
+        if (data.found) {
+          stopOutboundWatch()
+          setSftpTest({
+            phase: 'done',
+            ok: true,
+            message: `Outbound connection complete. Read ${data.file}: ${data.text || '(empty file)'}`,
+          })
+        }
+      } catch {
+        stopOutboundWatch()
+        setSftpTest({ phase: 'connected', ok: false, message: 'Could not reach the test service.' })
+      }
+    }, 2000)
+  }
+  const onSftpButton = async () => {
+    if (sftpTest.phase === 'connected') {
+      setSftpTest({ phase: 'sending', ok: true, message: 'Sending inbound.txt…' })
+      try {
+        const data = await postSftp('send-inbound')
+        if (!data.ok) {
+          setSftpTest({ phase: 'connected', ok: false, message: data.error || 'Could not send inbound.txt.' })
+          return
+        }
+        setSftpTest({
+          phase: 'waiting',
+          ok: true,
+          message: `Sent inbound.txt to ${data.folder}. Drop outbound.txt into that folder.`,
+        })
+        watchOutbound()
+      } catch {
+        setSftpTest({ phase: 'connected', ok: false, message: 'Could not reach the test service.' })
+      }
+      return
+    }
+    setSftpTest({ phase: 'connecting', ok: false, message: '' })
+    try {
+      const data = await postSftp('connect')
+      if (data.ok) {
+        setSftpTest({
+          phase: 'connected',
+          ok: true,
+          message: `Connection established. The folder on this machine is ${data.folder}.`,
+        })
+      } else {
+        setSftpTest({ phase: 'idle', ok: false, message: data.error || 'Connection failed' })
+      }
+    } catch {
+      setSftpTest({ phase: 'idle', ok: false, message: 'Could not reach the test service.' })
+    }
+  }
+  const sftpBusy = ['connecting', 'sending', 'waiting', 'done'].includes(sftpTest.phase)
+  const sftpLabel = {
+    idle: 'Establish connection',
+    connecting: 'Establishing…',
+    connected: 'Test connection',
+    sending: 'Sending inbound.txt…',
+    waiting: 'Waiting for outbound.txt…',
+    done: 'Done',
+  }[sftpTest.phase]
 
   const submit = (ev) => {
     ev.preventDefault()
@@ -327,9 +420,17 @@ export default function App() {
           <label className="inline block"><input type="checkbox" checked={state.sftp} onChange={(e) => setState((s) => ({ ...s, sftp: e.target.checked }))} /> <b>SFTP</b></label>
           {err('other').comm && <em role="alert">{err('other').comm}</em>}
           {state.sftp && (
-            <div className="cols sub">
-              <Fields prefix="sftp" fields={SFTP_FIELDS} values={state.sftpDetails} onChange={setGroup('sftpDetails')} />
-            </div>
+            <>
+              <div className="cols sub">
+                <Fields prefix="sftp" fields={SFTP_FIELDS} values={state.sftpDetails} onChange={setGroup('sftpDetails')} />
+              </div>
+              <div className="actions">
+                <button type="button" onClick={onSftpButton} disabled={!sftpReady || sftpBusy}>
+                  {sftpLabel} {!sftpBusy && <Chevron />}
+                </button>
+              </div>
+              {sftpTest.message && <div className={`banner ${sftpTest.ok ? 'ok' : 'err'}`} role="status">{sftpTest.message}</div>}
+            </>
           )}
         </section>
 

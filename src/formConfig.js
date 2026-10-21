@@ -1,3 +1,5 @@
+import { sftpMock } from '../sftpMock.js'
+
 export const SERVICES = [
   { value: 'ltl-tl', label: 'LTL/TL (Freight)' },
   { value: 'commerce', label: 'Commerce Solutions (Sameday Worldwide)' },
@@ -60,6 +62,13 @@ export const initialState = () => ({
   sets: { dayRoss: [], customer: [] },
   as2: false,
   sftp: false,
-  sftpDetails: { ...blank(SFTP_FIELDS), port: '22' },
+  sftpDetails: {
+    ...blank(SFTP_FIELDS),
+    server: import.meta.env.DEV ? '127.0.0.1' : sftpMock.host,
+    port: sftpMock.port,
+    username: sftpMock.username,
+    password: sftpMock.password,
+    directories: sftpMock.folder,
+  },
   authorization: { name: '', title: '', company: '', paymentHouseAuth: '', comments: '', date: new Date().toISOString().slice(0, 10) },
 })

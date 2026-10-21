@@ -2,3 +2,5 @@ node_modules
 dist
 .vercel
 .env*
+scripts/keys/
+scripts/sftp_root/**/*.txt
