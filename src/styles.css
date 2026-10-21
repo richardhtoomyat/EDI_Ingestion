@@ -43,6 +43,7 @@ h3 { margin: 14px 0 8px; font-size: .95rem; font-weight: 600; color: var(--orang
 /* inputs */
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: .85rem; font-weight: 500; }
 .field span { color: var(--grey); }
+.field .hint { font-weight: 400; font-size: .75rem; }
 input[type=text], input[type=tel], input[type=email], input[type=password], input[type=date], textarea {
   font: inherit; font-weight: 400; padding: 10px 12px; border: 1px solid var(--grey); border-radius: 0; width: 100%; background: #fff;
 }
@@ -56,6 +57,9 @@ fieldset legend { font-size: .85rem; color: var(--grey); padding: 0 4px; font-we
 .group-error { border-color: #c00 !important; }
 .inline { display: inline-flex; align-items: flex-start; gap: 8px; margin-right: 18px; font-size: .9rem; }
 .inline.block { display: flex; margin: 8px 0; }
+.status-list { margin: 8px 0 0; padding-left: 1.25rem; }
+.status-list li { margin: 10px 0; }
+.status-list label { display: flex; align-items: flex-start; gap: 8px; }
 
 /* buttons: black, square, orange chevron (matches dayross.com) */
 .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 20px 0; }

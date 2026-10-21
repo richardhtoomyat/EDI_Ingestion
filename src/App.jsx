@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  SERVICES, PARTY_FIELDS, DEVELOPER_FIELDS, TRANSACTION_SETS, SFTP_FIELDS, initialState,
+  SERVICES, PARTY_FIELDS, DEVELOPER_FIELDS, TRANSACTION_SETS, SFTP_FIELDS, NORMAL_STATUSES, EXCEPTION_STATUSES, initialState,
 } from './formConfig.js'
 import logo from './assets/logo.png'
 
@@ -140,7 +140,7 @@ function PartyColumn({ title, prefix, values, onChange, errors }) {
 }
 
 function validate(s) {
-  const e = { mainAccount: {}, logisticsProvider: {}, developer: {}, authorization: {}, other: {} }
+  const e = { mainAccount: {}, logisticsProvider: {}, developer: {}, authorization: {}, x12: {}, other: {} }
   const need = (group, key, v) => { if (!String(v).trim()) e[group][key] = 'Required' }
   for (const f of PARTY_FIELDS.filter((f) => f.required)) {
     need('mainAccount', f.name, s.mainAccount[f.name])
@@ -160,11 +160,62 @@ function validate(s) {
     if (vals.email && !emailRe.test(vals.email) && vals.email.toUpperCase() !== 'N/A') e[g].email = 'Enter a valid email'
   }
   if (s.services.length === 0) e.other.services = 'Select at least one service'
+  if (!/^[A-Z]{2,4}$/.test(s.x12.scac)) e.x12.scac = 'Use 2 to 4 letters'
+  if (!/^[A-Z0-9]{1,15}$/.test(s.x12.isa)) e.x12.isa = 'Use 1 to 15 letters or digits'
+  if (!/^[A-Z0-9]{2,15}$/.test(s.x12.gs)) e.x12.gs = 'Use 2 to 15 letters or digits'
   if (!s.as2 && !s.sftp) e.other.comm = 'Select a communication method'
   return e
 }
 
 const hasErrors = (e) => Object.values(e).some((g) => Object.keys(g).length)
+const wants214 = (s) => s.sets.dayRoss.includes('214') || s.sets.customer.includes('214')
+
+function statusId(status, index) {
+  return `${status.code}:${index}:${status.name}`
+}
+
+function statusNames(ids, list) {
+  return ids.map((id) => list.find((status, index) => statusId(status, index) === id)?.name).filter(Boolean).join('\n')
+}
+
+function StatusPage({ normal, exception, onToggle, onBack, onContinue, error }) {
+  const column = (title, list, selected, group) => (
+    <div>
+      <h3>{title}</h3>
+      <ul className="status-list">
+        {list.map((status, index) => {
+          const id = statusId(status, index)
+          return (
+            <li key={id}>
+              <label>
+                <input type="checkbox" checked={selected.includes(id)} onChange={() => onToggle(group, id)} />
+                <span>{status.name}</span>
+              </label>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+  return (
+    <Shell>
+      <main className="page">
+        <section className="card">
+          <h2>214 Status <small>Select the statuses Day &amp; Ross should send</small></h2>
+          {error && <div className="banner err" role="alert">{error}</div>}
+          <div className="cols">
+            {column('Normal Status', NORMAL_STATUSES, normal, 'normalStatuses')}
+            {column('Exception Status', EXCEPTION_STATUSES, exception, 'exceptionStatuses')}
+          </div>
+        </section>
+        <div className="actions">
+          <button type="button" className="secondary" onClick={onBack}>Back</button>
+          <button type="button" onClick={onContinue}>Review &amp; Submit <Chevron /></button>
+        </div>
+      </main>
+    </Shell>
+  )
+}
 
 function Summary({ state, onEdit }) {
   const sets = (key) => TRANSACTION_SETS.filter((t) => state.sets[key].includes(t.code)).map((t) => t.code).join(', ') || '—'
@@ -182,6 +233,11 @@ function Summary({ state, onEdit }) {
     `Logistics provider: ${state.logisticsProvider.companyName} (#${state.logisticsProvider.accountNumber}, ${state.logisticsProvider.accountSystem})`,
     `D&R provides specs: ${sets('dayRoss')}`,
     `Customer provides specs: ${sets('customer')}`,
+    `SCAC: ${state.x12.scac}`,
+    `ISA: ${state.x12.isa}`,
+    `GS: ${state.x12.gs}`,
+    state.normalStatuses.length ? `214 normal statuses: ${statusNames(state.normalStatuses, NORMAL_STATUSES).replaceAll('\n', ', ')}` : '',
+    state.exceptionStatuses.length ? `214 exception statuses: ${statusNames(state.exceptionStatuses, EXCEPTION_STATUSES).replaceAll('\n', ', ')}` : '',
     `Communication: ${[state.as2 && 'AS2', state.sftp && 'SFTP'].filter(Boolean).join(', ')}`,
     state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
     `Completed by: ${state.authorization.name}, ${state.authorization.title}, ${state.authorization.company} on ${state.authorization.date}`,
@@ -212,6 +268,11 @@ function Summary({ state, onEdit }) {
       <section className="card"><h2>Transaction Sets (ANSI X12, 4010)</h2><table><tbody>
         {row('Day & Ross provides specs', sets('dayRoss'))}
         {row('Customer provides specs', sets('customer'))}
+        {row('SCAC', state.x12.scac)}
+        {row('ISA', state.x12.isa)}
+        {row('GS', state.x12.gs)}
+        {state.normalStatuses.length ? row('214 normal statuses', statusNames(state.normalStatuses, NORMAL_STATUSES)) : null}
+        {state.exceptionStatuses.length ? row('214 exception statuses', statusNames(state.exceptionStatuses, EXCEPTION_STATUSES)) : null}
       </tbody></table></section>
       <section className="card"><h2>Communication</h2><table><tbody>
         {row('AS2', state.as2 ? 'Yes (billable setup charge applies)' : 'No')}
@@ -234,7 +295,8 @@ function Summary({ state, onEdit }) {
 export default function App() {
   const [state, setState] = useState(initialState)
   const [errors, setErrors] = useState(null)
-  const [done, setDone] = useState(false)
+  const [page, setPage] = useState('form')
+  const [statusError, setStatusError] = useState('')
   const [sftpTest, setSftpTest] = useState({ phase: 'idle', ok: false, message: '' })
   const sftpTarget = useRef({ server: '', port: '' })
   const pollRef = useRef(null)
@@ -341,11 +403,34 @@ export default function App() {
       setTimeout(() => document.querySelector('.has-error, .group-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
       return
     }
-    setDone(true)
+    if (wants214(state)) setPage('statuses')
+    else setPage('review')
     window.scrollTo(0, 0)
   }
 
-  if (done) return <Summary state={state} onEdit={() => setDone(false)} />
+  if (page === 'review') return <Summary state={state} onEdit={() => setPage('form')} />
+  if (page === 'statuses') {
+    return (
+      <StatusPage
+        normal={state.normalStatuses}
+        exception={state.exceptionStatuses}
+        error={statusError}
+        onToggle={(group, id) => {
+          setStatusError('')
+          setState((s) => ({ ...s, [group]: toggle(s[group], id) }))
+        }}
+        onBack={() => { setPage('form'); window.scrollTo(0, 0) }}
+        onContinue={() => {
+          if (state.normalStatuses.length + state.exceptionStatuses.length === 0) {
+            setStatusError('Select at least one status')
+            return
+          }
+          setPage('review')
+          window.scrollTo(0, 0)
+        }}
+      />
+    )
+  }
 
   return (
     <Shell>
@@ -414,6 +499,33 @@ export default function App() {
           </div>
         </section>
 
+        <section className="card">
+          <h2>Trading partner identifiers <small>ANSI X12</small></h2>
+          <div className="cols">
+            {[
+              ['scac', 'SCAC', 4, '2 to 4 letters'],
+              ['isa', 'ISA', 15, '1 to 15 letters or digits. Padded to 15 in ISA06/ISA08.'],
+              ['gs', 'GS', 15, '2 to 15 letters or digits (GS02/GS03).'],
+            ].map(([name, label, max, hint]) => (
+              <label key={name} className={`field${err('x12')[name] ? ' has-error' : ''}`} htmlFor={`x12-${name}`}>
+                <span>{label} <b className="req">*</b></span>
+                <input
+                  id={`x12-${name}`}
+                  value={state.x12[name]}
+                  maxLength={max}
+                  autoComplete="off"
+                  onChange={(ev) => {
+                    const value = ev.target.value.toUpperCase().replace(name === 'scac' ? /[^A-Z]/g : /[^A-Z0-9]/g, '').slice(0, max)
+                    setState((s) => ({ ...s, x12: { ...s.x12, [name]: value } }))
+                  }}
+                />
+                <span className="hint">{hint}</span>
+                {err('x12')[name] && <em role="alert">{err('x12')[name]}</em>}
+              </label>
+            ))}
+          </div>
+        </section>
+
         <section className={`card${err('other').comm ? ' group-error' : ''}`}>
           <h2>Communication Methods <small>(check the appropriate boxes)</small></h2>
           <label className="inline block"><input type="checkbox" checked={state.as2} onChange={(e) => setState((s) => ({ ...s, as2: e.target.checked }))} /> <span><b>AS2</b> <i>* There is a billable charge for setting up AS2</i></span></label>
@@ -456,7 +568,7 @@ export default function App() {
           </label>
         </section>
 
-        <div className="actions"><button type="submit">Review &amp; Submit <Chevron /></button></div>
+        <div className="actions"><button type="submit">{wants214(state) ? 'Next' : 'Review & Submit'} <Chevron /></button></div>
       </form>
     </main>
     </Shell>

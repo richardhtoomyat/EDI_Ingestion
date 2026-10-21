@@ -26,6 +26,54 @@ export const DEVELOPER_FIELDS = [
   { name: 'email', label: 'Email', type: 'email' },
 ]
 
+// SCAC is 2–4 letters. ISA06/ISA08 is 15 characters. GS02/GS03 is 2–15.
+
+export const NORMAL_STATUSES = [
+  { code: 'P', name: 'Pick up' },
+  { code: 'AF', name: 'Departed Pickup Location' },
+  { code: 'X6', name: 'En Route to Delivery Location' },
+  { code: 'X1', name: 'Arrived at Delivery Location' },
+  { code: 'D1', name: 'Completed Unloading at Delivery Location' },
+  { code: 'A9', name: 'Shipment Damaged' },
+  { code: 'X3', name: 'Arrived at Pickup Location' },
+  { code: 'X4', name: 'Arrived at Terminal Location' },
+  { code: 'P1', name: 'Departed Terminal Location' },
+  { code: 'X5', name: 'Arrived at Delivery Location Loading Dock' },
+  { code: 'OO', name: 'Paperwork Received' },
+  { code: 'AV', name: 'Available for Delivery' },
+  { code: 'AI', name: 'Shipment has been Reconsigned' },
+  { code: 'AJ', name: 'Tendered for Delivery' },
+  { code: 'SD', name: 'Shipment Delayed' },
+  { code: 'AH', name: 'Attempted Delivery' },
+  { code: 'A7', name: 'Refused by Consignee' },
+  { code: 'X8', name: 'Arrived at Pickup Location Loading Dock' },
+]
+
+export const EXCEPTION_STATUSES = [
+  { code: 'AP', name: 'Shipment Cancelled' },
+  { code: 'A3', name: 'Shipment Returned to Shipper' },
+  { code: 'AB', name: 'Delivery Appointment' },
+  { code: 'AC', name: 'Delivery Appointment' },
+  { code: 'ED', name: 'Estimated Delivery Appointment' },
+  { code: 'X2', name: 'Estimated to Arrive at Terminal' },
+  { code: 'AG', name: 'Estimated to Depart Terminal' },
+  { code: 'CD', name: 'Hold' },
+  { code: 'K1', name: 'Arrived at Customs' },
+  { code: 'CR', name: 'Customs Released' },
+  { code: 'BA', name: 'Inbond Paperwork Filed' },
+  { code: 'BC', name: 'Border Crossed' },
+  { code: 'C2', name: 'Canada Customs Held' },
+  { code: 'AB', name: 'Pickup Appointment Date/Time' },
+  { code: 'SD', name: 'Shipment Delayed' },
+  { code: 'A7', name: 'Delivery Refused' },
+  { code: 'A28', name: 'Load Refused' },
+  { code: 'AP', name: 'Undeliverable Shipment' },
+  { code: 'CL', name: 'Trailer Closed Out' },
+  { code: 'S1', name: 'Trailer Spotted at Delivery Location' },
+  { code: 'S2', name: 'Trailer Spotted at Pickup Location' },
+  { code: 'AH', name: 'Attempted Delivery' },
+]
+
 // dayRoss / customer: which side provides specs for this transaction set (null = not offered)
 export const TRANSACTION_SETS = [
   { code: '204', name: 'Load Tender - Inbound - Day & Ross Receives', dayRoss: true, customer: true },
@@ -60,6 +108,9 @@ export const initialState = () => ({
   paymentHouse: { companyName: '', contactName: '' },
   developer: blank(DEVELOPER_FIELDS),
   sets: { dayRoss: [], customer: [] },
+  x12: { scac: '', isa: '', gs: '' },
+  normalStatuses: [],
+  exceptionStatuses: [],
   as2: false,
   sftp: false,
   sftpDetails: {
