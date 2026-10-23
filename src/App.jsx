@@ -371,6 +371,163 @@ function validate(s) {
 const hasErrors = (e) => Object.values(e).some((g) => Object.keys(g).length)
 const wants214 = (s) => s.sets.dayRoss.includes('214') || s.sets.customer.includes('214')
 
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+function isoDate(date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+function addDays(date, count) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + count)
+}
+
+function mondayOf(date) {
+  const day = date.getDay()
+  return addDays(date, day === 0 ? -6 : 1 - day)
+}
+
+function monthCells(year, month) {
+  const last = new Date(year, month + 1, 0)
+  const start = mondayOf(new Date(year, month, 1))
+  const end = addDays(mondayOf(last), 6)
+  const cells = []
+  for (let date = start; date <= end; date = addDays(date, 1)) cells.push(date)
+  return cells
+}
+
+function formatWeek(mondayIso) {
+  const start = mondayOf(new Date(`${mondayIso}T00:00:00`))
+  const end = addDays(start, 6)
+  const sameMonth = start.getMonth() === end.getMonth()
+  const left = `${MONTHS[start.getMonth()].slice(0, 3)} ${start.getDate()}`
+  const right = sameMonth ? String(end.getDate()) : `${MONTHS[end.getMonth()].slice(0, 3)} ${end.getDate()}`
+  return `${left} – ${right}, ${end.getFullYear()}`
+}
+
+function WeekPicker({ selected, onToggle }) {
+  const today = new Date()
+  const todayIso = isoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate()))
+  const thisMonday = isoDate(mondayOf(today))
+  const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
+  const [hover, setHover] = useState(null)
+  const firstMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+  const lastMonth = new Date(today.getFullYear(), today.getMonth() + 8, 1)
+  const right = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+  const canPrev = cursor > firstMonth
+  const canNext = right < lastMonth
+  const sorted = [...selected].sort()
+  const preview = hover && !selected.includes(hover) && selected.length < 3 ? hover : null
+  const slots = preview ? [...sorted, preview] : sorted
+
+  const paint = (date) => {
+    const monday = isoDate(mondayOf(date))
+    const past = monday < thisMonday
+    const picked = selected.includes(monday)
+    const showing = picked || hover === monday
+    const day = date.getDay()
+    return {
+      monday,
+      past,
+      className: [
+        'cal-cell',
+        past ? 'past' : '',
+        picked ? 'picked' : '',
+        !picked && hover === monday && !past && selected.length < 3 ? 'preview' : '',
+        showing && !past && (picked || selected.length < 3) ? (day === 1 ? 'start edge' : day === 0 ? 'end edge' : 'mid') : '',
+        isoDate(date) === todayIso ? 'today' : '',
+      ].filter(Boolean).join(' '),
+    }
+  }
+
+  const month = (date, side) => {
+    const cells = monthCells(date.getFullYear(), date.getMonth())
+    return (
+      <div className="month">
+        <div className="month-title">
+          {side === 'left' ? (
+            <button type="button" className="cal-nav" aria-label="Previous month" disabled={!canPrev} onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>‹</button>
+          ) : <span />}
+          <div className="month-name">{MONTHS[date.getMonth()]} {date.getFullYear()}</div>
+          {side === 'right' ? (
+            <button type="button" className="cal-nav" aria-label="Next month" disabled={!canNext} onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>›</button>
+          ) : <span />}
+        </div>
+        <div className="cal-grid" onMouseLeave={() => setHover(null)}>
+          {WEEKDAYS.map((name) => <div key={name} className="cal-dow">{name.slice(0, 2)}</div>)}
+          {cells.map((day) => {
+            const cell = paint(day)
+            const outside = day.getMonth() !== date.getMonth()
+            return (
+              <button
+                key={isoDate(day)}
+                type="button"
+                className={`${cell.className}${outside ? ' out' : ''}`}
+                disabled={cell.past}
+                aria-pressed={selected.includes(cell.monday)}
+                aria-label={`Week of ${formatWeek(cell.monday)}`}
+                onMouseEnter={() => { if (!cell.past) setHover(cell.monday) }}
+                onClick={() => onToggle(cell.monday)}
+              >
+                <span className="num">{day.getDate()}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flights">
+      <div className="week-slots">
+        {[0, 1, 2].map((index) => {
+          const value = slots[index]
+          const isPreview = value && value === preview
+          return (
+            <button
+              key={index}
+              type="button"
+              className={`week-slot${value && !isPreview ? ' filled' : ''}${isPreview ? ' preview' : ''}`}
+              disabled={!value || isPreview}
+              onClick={() => onToggle(value)}
+            >
+              <span className="slot-k">Week {index + 1}</span>
+              <span className="slot-v">{value ? formatWeek(value) : 'Select a week'}</span>
+            </button>
+          )
+        })}
+      </div>
+      <div className="flights-board">
+        {month(cursor, 'left')}
+        {month(right, 'right')}
+      </div>
+    </div>
+  )
+}
+
+function KickoffPage({ weeks, onToggle, onBack, onContinue, error }) {
+  return (
+    <Shell>
+      <main className="page">
+        <section className="card">
+          <h2>Developer Kickoff Call <small>Pick 3 weeks you are available</small></h2>
+          <p className="intro">Each choice is one full week, Monday through Sunday. Click any day to select that week, and click it again to remove it.</p>
+          {error && <div className="banner err" role="alert">{error}</div>}
+          <WeekPicker selected={weeks} onToggle={onToggle} />
+          <p className="week-count">{weeks.length} of 3 weeks selected</p>
+        </section>
+        <div className="actions">
+          <button type="button" className="secondary" onClick={onBack}>Back</button>
+          <button type="button" onClick={onContinue}>Review &amp; Submit <Chevron /></button>
+        </div>
+      </main>
+    </Shell>
+  )
+}
+
 function statusId(status, index) {
   return `${status.code}:${index}:${status.name}`
 }
@@ -411,7 +568,7 @@ function StatusPage({ normal, exception, onToggle, onBack, onContinue, error }) 
         </section>
         <div className="actions">
           <button type="button" className="secondary" onClick={onBack}>Back</button>
-          <button type="button" onClick={onContinue}>Review &amp; Submit <Chevron /></button>
+          <button type="button" onClick={onContinue}>Next <Chevron /></button>
         </div>
       </main>
     </Shell>
@@ -439,6 +596,7 @@ function Summary({ state, onEdit }) {
     `GS: ${state.x12.gs}`,
     state.normalStatuses.length ? `214 normal statuses: ${statusNames(state.normalStatuses, NORMAL_STATUSES).replaceAll('\n', ', ')}` : '',
     state.exceptionStatuses.length ? `214 exception statuses: ${statusNames(state.exceptionStatuses, EXCEPTION_STATUSES).replaceAll('\n', ', ')}` : '',
+    `Developer Kickoff Call: ${[...state.kickoffWeeks].sort().map(formatWeek).join('; ')}`,
     `Communication: ${[state.as2 && 'AS2', state.sftp && 'SFTP'].filter(Boolean).join(', ')}`,
     state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
     `Completed by: ${state.authorization.name}, ${state.authorization.title}, ${state.authorization.company} on ${state.authorization.date}`,
@@ -474,6 +632,7 @@ function Summary({ state, onEdit }) {
         {row('GS', state.x12.gs)}
         {state.normalStatuses.length ? row('214 normal statuses', statusNames(state.normalStatuses, NORMAL_STATUSES)) : null}
         {state.exceptionStatuses.length ? row('214 exception statuses', statusNames(state.exceptionStatuses, EXCEPTION_STATUSES)) : null}
+        {row('Developer Kickoff Call', [...state.kickoffWeeks].sort().map(formatWeek).join('\n'))}
       </tbody></table></section>
       <section className="card"><h2>Communication</h2><table><tbody>
         {row('AS2', state.as2 ? 'Yes (billable setup charge applies)' : 'No')}
@@ -498,6 +657,7 @@ export default function App() {
   const [errors, setErrors] = useState(null)
   const [page, setPage] = useState('form')
   const [statusError, setStatusError] = useState('')
+  const [kickoffError, setKickoffError] = useState('')
   const [sftpTest, setSftpTest] = useState({ phase: 'idle', ok: false, message: '' })
   const sftpTarget = useRef({ server: '', port: '' })
   const pollRef = useRef(null)
@@ -604,9 +764,19 @@ export default function App() {
       setTimeout(() => document.querySelector('.has-error, .group-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
       return
     }
-    if (wants214(state)) setPage('statuses')
-    else setPage('review')
+    setPage(wants214(state) ? 'statuses' : 'kickoff')
     window.scrollTo(0, 0)
+  }
+
+  const toggleKickoff = (monday) => {
+    setKickoffError('')
+    setState((current) => {
+      if (current.kickoffWeeks.includes(monday)) {
+        return { ...current, kickoffWeeks: current.kickoffWeeks.filter((week) => week !== monday) }
+      }
+      if (current.kickoffWeeks.length >= 3) return current
+      return { ...current, kickoffWeeks: [...current.kickoffWeeks, monday] }
+    })
   }
 
   if (page === 'review') return <Summary state={state} onEdit={() => setPage('form')} />
@@ -624,6 +794,30 @@ export default function App() {
         onContinue={() => {
           if (state.normalStatuses.length + state.exceptionStatuses.length === 0) {
             setStatusError('Select at least one status')
+            return
+          }
+          setPage('kickoff')
+          window.scrollTo(0, 0)
+        }}
+      />
+    )
+  }
+  if (page === 'kickoff') {
+    return (
+      <KickoffPage
+        weeks={state.kickoffWeeks}
+        error={kickoffError}
+        onToggle={(monday) => {
+          if (!state.kickoffWeeks.includes(monday) && state.kickoffWeeks.length >= 3) {
+            setKickoffError('Remove a week before choosing a different one')
+            return
+          }
+          toggleKickoff(monday)
+        }}
+        onBack={() => { setPage(wants214(state) ? 'statuses' : 'form'); window.scrollTo(0, 0) }}
+        onContinue={() => {
+          if (state.kickoffWeeks.length !== 3) {
+            setKickoffError('Pick 3 weeks for the Developer Kickoff Call')
             return
           }
           setPage('review')
@@ -769,7 +963,7 @@ export default function App() {
           </label>
         </section>
 
-        <div className="actions"><button type="submit">{wants214(state) ? 'Next' : 'Review & Submit'} <Chevron /></button></div>
+        <div className="actions"><button type="submit">Next <Chevron /></button></div>
       </form>
     </main>
     </Shell>

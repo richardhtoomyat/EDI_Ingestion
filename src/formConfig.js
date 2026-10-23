@@ -111,6 +111,7 @@ export const initialState = () => ({
   x12: { scac: '', isa: '', gs: '' },
   normalStatuses: [],
   exceptionStatuses: [],
+  kickoffWeeks: [],
   as2: false,
   sftp: false,
   sftpDetails: {
