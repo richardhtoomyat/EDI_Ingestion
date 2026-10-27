@@ -22,6 +22,7 @@ create table public.onboarding (
   edi_note text not null default '',
   edi_stage text not null default '' check (edi_stage in ('', 'started', 'test', 'production')),
   estimated_completion_date date,
+  edi_bucket_order integer not null default 0,
   ready_at timestamptz,
   assigned_at timestamptz,
   started_at timestamptz,
@@ -38,6 +39,8 @@ create index if not exists onboarding_needs_at7_mapping_idx
   on public.onboarding (needs_at7_mapping)
   where needs_at7_mapping = true;
 create index if not exists onboarding_edi_owner_id_idx on public.onboarding (edi_owner_id);
+create index if not exists onboarding_edi_bucket_order_idx
+  on public.onboarding (edi_owner_id, edi_bucket_order);
 create index if not exists onboarding_edi_stage_idx on public.onboarding (edi_stage);
 create index if not exists onboarding_ready_at_idx on public.onboarding (ready_at);
 create index if not exists onboarding_completed_at_idx on public.onboarding (completed_at);

@@ -187,6 +187,7 @@ function toRecord(row) {
     ediNote: row.edi_note || '',
     ediStage: row.edi_stage || '',
     estimatedCompletionDate: row.estimated_completion_date || '',
+    ediBucketOrder: Number.isFinite(Number(row.edi_bucket_order)) ? Number(row.edi_bucket_order) : 0,
     readyAt: row.ready_at ? new Date(row.ready_at).getTime() : null,
     assignedAt: row.assigned_at ? new Date(row.assigned_at).getTime() : null,
     startedAt: row.started_at ? new Date(row.started_at).getTime() : null,
@@ -283,6 +284,17 @@ function readyAtPatch(row) {
   return { ready_at: new Date().toISOString() }
 }
 
+async function nextBucketOrder(ownerId) {
+  const filter = ownerId
+    ? `edi_owner_id=eq.${encodeURIComponent(ownerId)}`
+    : 'edi_owner_id=is.null'
+  const rows = await supabase(
+    `${TABLE}?${filter}&select=edi_bucket_order&order=edi_bucket_order.desc&limit=1`,
+  )
+  const current = Number(rows?.[0]?.edi_bucket_order)
+  return (Number.isFinite(current) ? current : -1) + 1
+}
+
 export default async function handler(req, res) {
   try {
     const token = req.query?.token
@@ -360,7 +372,33 @@ export default async function handler(req, res) {
     if (req.method === 'PATCH') {
       const {
         id, draft, traderIdQa, traderIdProd, ediOwnerId, ediNote, completed, ediStage, estimatedCompletionDate,
+        ediBucketOrder, bucketOrders,
       } = req.body || {}
+
+      if (Array.isArray(bucketOrders)) {
+        const { profile } = await requireRole(req, ['edi'])
+        const updated = []
+        for (const entry of bucketOrders) {
+          const entryId = String(entry?.id || '').trim()
+          if (!entryId) continue
+          const order = Number(entry.ediBucketOrder)
+          if (!Number.isFinite(order)) continue
+          const rows = await supabase(`${TABLE}?id=eq.${encodeURIComponent(entryId)}`, {
+            method: 'PATCH',
+            body: {
+              edi_bucket_order: Math.trunc(order),
+              ...lastModifiedFields(profile),
+              updated_at: new Date().toISOString(),
+            },
+          })
+          if (rows?.[0]) {
+            const full = await loadOnboarding(entryId)
+            updated.push(toRecord(full))
+          }
+        }
+        return res.status(200).json({ ok: true, records: updated })
+      }
+
       if (!id) return res.status(400).json({ ok: false, error: 'Missing onboarding id' })
 
       if (
@@ -369,6 +407,7 @@ export default async function handler(req, res) {
         || completed !== undefined
         || ediStage !== undefined
         || estimatedCompletionDate !== undefined
+        || ediBucketOrder !== undefined
       ) {
         const { profile, user } = await requireRole(req, ['edi'])
         const existing = await loadOnboarding(id)
@@ -379,8 +418,19 @@ export default async function handler(req, res) {
         }
         if (ediOwnerId !== undefined) {
           const nextOwner = String(ediOwnerId || '').trim() || null
+          const ownerChanged = (existing.edi_owner_id || null) !== nextOwner
           body.edi_owner_id = nextOwner
           if (nextOwner && !existing.assigned_at) body.assigned_at = new Date().toISOString()
+          if (ownerChanged && ediBucketOrder === undefined) {
+            body.edi_bucket_order = await nextBucketOrder(nextOwner)
+          }
+        }
+        if (ediBucketOrder !== undefined) {
+          const order = Number(ediBucketOrder)
+          if (!Number.isFinite(order)) {
+            return res.status(400).json({ ok: false, error: 'Invalid bucket order' })
+          }
+          body.edi_bucket_order = Math.trunc(order)
         }
         if (ediNote !== undefined) body.edi_note = String(ediNote || '')
         if (ediStage !== undefined) {
@@ -515,11 +565,11 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   } catch (error) {
-    const missing = error.code === 'PGRST205' || /onboarding|profiles|needs_at7|at7_|edi_owner|edi_stage|ready_at|completed_at|estimated_completion/i.test(error.message || '')
+    const missing = error.code === 'PGRST205' || /onboarding|profiles|needs_at7|at7_|edi_owner|edi_stage|edi_bucket_order|ready_at|completed_at|estimated_completion/i.test(error.message || '')
     return res.status(missing && error.status !== 401 && error.status !== 403 && error.status !== 404 ? 503 : error.status || 500).json({
       ok: false,
       error: missing && error.status !== 401 && error.status !== 403 && error.status !== 404
-        ? 'Onboarding tables/columns are missing. Run supabase/onboarding.sql (or supabase/onboarding_edi_stages.sql on an existing DB) in the Supabase SQL editor.'
+        ? 'Onboarding tables/columns are missing. Run supabase/onboarding.sql (or supabase/onboarding_bucket_order.sql on an existing DB) in the Supabase SQL editor.'
         : error.message,
     })
   }

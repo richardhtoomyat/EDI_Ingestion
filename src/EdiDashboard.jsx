@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Shell } from './chrome.jsx'
 import { CreateOnboarding } from './AgentApp.jsx'
-import { emptyDeveloper, loadEdiTeam, loadOnboardings, updateEdiAssignment } from './onboardingLink.js'
+import { emptyDeveloper, loadEdiTeam, loadOnboardings, reorderEdiBucket, updateEdiAssignment } from './onboardingLink.js'
 
 const STATUSES = [
   { value: 'all', label: 'All statuses' },
@@ -118,6 +118,7 @@ function recordToItem(record) {
     ownerId: record.ediOwnerId || '',
     ediStage: record.ediStage || '',
     estimatedCompletionDate: record.estimatedCompletionDate || '',
+    ediBucketOrder: Number.isFinite(Number(record.ediBucketOrder)) ? Number(record.ediBucketOrder) : 0,
     completed: Boolean(record.completedAt) || record.ediStage === 'production',
     note: record.ediNote || '',
     readyAt: record.readyAt || null,
@@ -414,10 +415,17 @@ export default function EdiDashboard({
   const [openId, setOpenId] = useState('')
   const [editing, setEditing] = useState(null)
   const [dragOver, setDragOver] = useState('')
+  const [dragOverItem, setDragOverItem] = useState('')
   const [stagePrompt, setStagePrompt] = useState(null)
   const [estimateDraft, setEstimateDraft] = useState('')
   const firstName = profile?.firstName || ''
   const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
+
+  const sortBucket = (list) => [...list].sort((a, b) => {
+    const orderDiff = (a.ediBucketOrder || 0) - (b.ediBucketOrder || 0)
+    if (orderDiff !== 0) return orderDiff
+    return (b.createdAt || 0) - (a.createdAt || 0)
+  })
 
   useEffect(() => {
     let cancel = false
@@ -490,6 +498,89 @@ export default function EdiDashboard({
     persistEdi(id, { ediOwnerId: ownerId }).catch(() => {})
   }
 
+  const applyRecords = (savedList) => {
+    if (!savedList?.length) return
+    setRecords((current) => {
+      const map = new Map(savedList.map((item) => [item.id, item]))
+      return current.map((item) => map.get(item.id) || item)
+    })
+  }
+
+  const persistBucketOrder = async (orderedItems) => {
+    const bucketOrders = orderedItems.map((item, index) => ({
+      id: item.id,
+      ediBucketOrder: index,
+    }))
+    // Optimistic local update
+    setRecords((current) => current.map((record) => {
+      const next = bucketOrders.find((entry) => entry.id === record.id)
+      return next ? { ...record, ediBucketOrder: next.ediBucketOrder } : record
+    }))
+    setSaveError('')
+    try {
+      const saved = await reorderEdiBucket(bucketOrders)
+      applyRecords(saved)
+    } catch (error) {
+      setSaveError(error.message)
+      // Reload to resync if persist failed
+      loadOnboardings().then(setRecords).catch(() => {})
+    }
+  }
+
+  const reorderInBucket = (ownerId, draggedId, targetId) => {
+    if (!draggedId || !targetId || draggedId === targetId) return
+    const bucket = sortBucket(items.filter((item) => (
+      ownerId === ''
+        ? !item.ownerId && !isDoneStatus(item.status)
+        : item.ownerId === ownerId
+    )))
+    const from = bucket.findIndex((item) => item.id === draggedId)
+    const to = bucket.findIndex((item) => item.id === targetId)
+    if (from < 0 || to < 0) return
+    const next = [...bucket]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    persistBucketOrder(next)
+  }
+
+  const onDropInBucket = (ownerId) => (event) => {
+    event.preventDefault()
+    const id = event.dataTransfer.getData('text/plain')
+    const targetId = event.currentTarget.getAttribute('data-item-id') || ''
+    setDragOver('')
+    setDragOverItem('')
+    if (!id) return
+    const current = items.find((item) => item.id === id)
+    const currentOwner = current?.ownerId || ''
+    if (currentOwner === ownerId && targetId) {
+      reorderInBucket(ownerId, id, targetId)
+      return
+    }
+    if (currentOwner !== ownerId) {
+      // Move to this bucket, then optionally place before target
+      persistEdi(id, { ediOwnerId: ownerId }).then(async () => {
+        if (!targetId) return
+        const refreshed = await loadOnboardings()
+        setRecords(refreshed)
+        const mapped = refreshed.map(recordToItem)
+        const bucket = sortBucket(mapped.filter((item) => (
+          ownerId === ''
+            ? !item.ownerId && !isDoneStatus(item.status)
+            : item.ownerId === ownerId
+        )))
+        const from = bucket.findIndex((item) => item.id === id)
+        const to = bucket.findIndex((item) => item.id === targetId)
+        if (from < 0 || to < 0 || from === to) return
+        const next = [...bucket]
+        const [moved] = next.splice(from, 1)
+        next.splice(to, 0, moved)
+        await persistBucketOrder(next)
+      }).catch(() => {})
+      return
+    }
+    if (currentOwner !== ownerId) assign(id, ownerId)
+  }
+
   const requestStage = (item, stage) => {
     if (stage === 'started') {
       setEstimateDraft(item.estimatedCompletionDate || '')
@@ -518,9 +609,45 @@ export default function EdiDashboard({
   const onDropOwner = (ownerId) => (event) => {
     event.preventDefault()
     const id = event.dataTransfer.getData('text/plain')
-    if (id) assign(id, ownerId)
     setDragOver('')
+    setDragOverItem('')
+    if (!id) return
+    const current = items.find((item) => item.id === id)
+    if ((current?.ownerId || '') === ownerId) return
+    assign(id, ownerId)
   }
+
+  const renderBucketCard = (item, ownerId) => (
+    <button
+      key={item.id}
+      type="button"
+      className={`bucket-card${dragOverItem === item.id ? ' drop-target' : ''}`}
+      data-item-id={item.id}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData('text/plain', item.id)
+        event.dataTransfer.effectAllowed = 'move'
+      }}
+      onDragOver={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        setDragOver(ownerId === '' ? 'none' : ownerId)
+        setDragOverItem(item.id)
+      }}
+      onDragLeave={() => {
+        setDragOverItem((current) => (current === item.id ? '' : current))
+      }}
+      onDrop={(event) => {
+        event.stopPropagation()
+        onDropInBucket(ownerId)(event)
+      }}
+      onClick={() => setOpenId(item.id)}
+    >
+      <strong>{item.company}</strong>
+      <span>{statusLabel(item.status, item, team)}</span>
+      {item.needsAt7Mapping && <span className="edi-flag">Custom mapping</span>}
+    </button>
+  )
 
   const openRecord = (id) => {
     const record = records.find((item) => item.id === id)
@@ -644,26 +771,20 @@ export default function EdiDashboard({
                 </section>
               )}
               {team.map((person) => {
-                const bucket = items.filter((item) => item.ownerId === person.id)
+                const bucket = sortBucket(items.filter((item) => item.ownerId === person.id))
                 return (
                   <section
                     key={person.id}
                     className={`card workbucket${dragOver === person.id ? ' over' : ''}`}
                     onDragOver={(event) => { event.preventDefault(); setDragOver(person.id) }}
-                    onDragLeave={() => setDragOver('')}
+                    onDragLeave={() => { setDragOver(''); setDragOverItem('') }}
                     onDrop={onDropOwner(person.id)}
                   >
                     <h3>{[person.firstName, person.lastName].filter(Boolean).join(' ') || person.email}</h3>
                     <p className="intro">{person.email}</p>
-                    <p className="bucket-label">Workbucket</p>
+                    <p className="bucket-label">Workbucket · drag to prioritize</p>
                     {bucket.length === 0 && <p className="intro">Drag an onboarding here.</p>}
-                    {bucket.map((item) => (
-                      <button key={item.id} type="button" className="bucket-card" draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', item.id)} onClick={() => setOpenId(item.id)}>
-                        <strong>{item.company}</strong>
-                        <span>{statusLabel(item.status, item, team)}</span>
-                        {item.needsAt7Mapping && <span className="edi-flag">Custom mapping</span>}
-                      </button>
-                    ))}
+                    {bucket.map((item) => renderBucketCard(item, person.id))}
                   </section>
                 )
               })}
@@ -671,17 +792,13 @@ export default function EdiDashboard({
             <section
               className={`card workbucket workbucket-unassigned${dragOver === 'none' ? ' over' : ''}`}
               onDragOver={(event) => { event.preventDefault(); setDragOver('none') }}
-              onDragLeave={() => setDragOver('')}
+              onDragLeave={() => { setDragOver(''); setDragOverItem('') }}
               onDrop={onDropOwner('')}
             >
               <h3>Unassigned</h3>
-              <p className="intro">Not in anyone's workbucket yet.</p>
-              {items.filter((item) => !item.ownerId && !isDoneStatus(item.status)).map((item) => (
-                <button key={item.id} type="button" className="bucket-card" draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', item.id)} onClick={() => setOpenId(item.id)}>
-                  <strong>{item.company}</strong>
-                  <span>{statusLabel(item.status, item, team)}</span>
-                  {item.needsAt7Mapping && <span className="edi-flag">Custom mapping</span>}
-                </button>
+              <p className="intro">Not in anyone's workbucket yet. Drag to prioritize.</p>
+              {sortBucket(items.filter((item) => !item.ownerId && !isDoneStatus(item.status))).map((item) => (
+                renderBucketCard(item, '')
               ))}
             </section>
           </div>

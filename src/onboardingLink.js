@@ -235,14 +235,26 @@ export async function inviteUsers({ emails, role, message }) {
   return payload
 }
 
-export function updateEdiAssignment(id, { ediOwnerId, ediNote, completed, ediStage, estimatedCompletionDate }) {
+export function updateEdiAssignment(id, { ediOwnerId, ediNote, completed, ediStage, estimatedCompletionDate, ediBucketOrder }) {
   const body = { id }
   if (ediOwnerId !== undefined) body.ediOwnerId = ediOwnerId
   if (ediNote !== undefined) body.ediNote = ediNote
   if (completed !== undefined) body.completed = completed
   if (ediStage !== undefined) body.ediStage = ediStage
   if (estimatedCompletionDate !== undefined) body.estimatedCompletionDate = estimatedCompletionDate
+  if (ediBucketOrder !== undefined) body.ediBucketOrder = ediBucketOrder
   return sendOnboarding('/api/onboardings', 'PATCH', body)
+}
+
+export async function reorderEdiBucket(bucketOrders) {
+  const response = await fetch('/api/onboardings', {
+    method: 'PATCH',
+    headers: await authHeaders(),
+    body: JSON.stringify({ bucketOrders }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || 'Could not save workbucket order')
+  return payload.records || []
 }
 
 export function traderLabel(value) {
