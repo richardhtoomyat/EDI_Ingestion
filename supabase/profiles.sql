@@ -3,7 +3,7 @@ create table public.profiles (
   email text not null,
   first_name text not null,
   last_name text not null,
-  role text not null check (role in ('sale', 'edi')),
+  role text not null check (role in ('sale', 'edi', 'coordinator')),
   created_at timestamptz not null default now()
 );
 
@@ -15,4 +15,4 @@ create policy "read own profile"
 
 create policy "insert own profile once"
   on public.profiles for insert
-  with check (auth.uid() = id and role in ('sale', 'edi'));
+  with check (auth.uid() = id and role in ('sale', 'edi', 'coordinator'));

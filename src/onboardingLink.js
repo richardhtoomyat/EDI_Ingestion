@@ -53,8 +53,7 @@ export function onboardingUrl(record) {
 
 export function customerRoute() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  if (path === '/edi') return { kind: 'edi' }
-  if (path === '/' ) return { kind: 'agent' }
+  if (path === '/' || path === '/edi' || path === '/coordinator') return { kind: 'agent' }
   if (path.startsWith('/c/')) {
     const token = decodeURIComponent(path.slice(3))
     return token ? { kind: 'token', token } : { kind: 'invalid' }

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Shell, Chevron } from './chrome.jsx'
 import AgentApp from './AgentApp.jsx'
+import CoordinatorPage from './CoordinatorPage.jsx'
+import EdiDashboard from './EdiDashboard.jsx'
 import {
   authConfigured,
   createAccount,
@@ -14,6 +16,12 @@ import {
   signOut,
   supabase,
 } from './auth.js'
+
+function screenForRole(role) {
+  if (role === 'sale') return 'sale'
+  if (role === 'coordinator') return 'coordinator'
+  return 'edi'
+}
 
 function TextField({ label, value, onChange, type = 'text', required, autoComplete }) {
   return (
@@ -105,27 +113,10 @@ function RoleCard({ error, busy, firstName, onChoose, onSignOut }) {
           <div className="role-actions">
             <button type="button" disabled={busy} onClick={() => onChoose('sale')}>Sales</button>
             <button type="button" className="secondary" disabled={busy} onClick={() => onChoose('edi')}>EDI</button>
+            <button type="button" className="secondary" disabled={busy} onClick={() => onChoose('coordinator')}>EDI Coordinator</button>
           </div>
           <div className="actions">
             <button type="button" className="secondary" disabled={busy} onClick={onSignOut}>Sign out</button>
-          </div>
-        </section>
-      </main>
-    </Shell>
-  )
-}
-
-function EdiHold({ profile, onSignOut }) {
-  const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
-  return (
-    <Shell title="EDI Portal">
-      <main className="page">
-        <section className="card">
-          {welcome && <p className="welcome-line">Welcome, {welcome}</p>}
-          <h2>EDI portal</h2>
-          <p className="intro">This portal is not connected yet. Sign out and return later, or choose Sales if you need the onboarding tools.</p>
-          <div className="actions">
-            <button type="button" className="secondary" onClick={onSignOut}>Sign out</button>
           </div>
         </section>
       </main>
@@ -174,7 +165,7 @@ export default function AuthGate() {
         setFirstName(existing.firstName)
         setLastName(existing.lastName)
         setError('')
-        setScreen(existing.role === 'sale' ? 'sale' : 'edi')
+        setScreen(screenForRole(existing.role))
         return
       }
       const names = namesFromUser(user)
@@ -285,7 +276,7 @@ export default function AuthGate() {
         role,
       })
       setProfile(saved)
-      setScreen(role === 'sale' ? 'sale' : 'edi')
+      setScreen(screenForRole(role))
     } catch (err) {
       setError(err.message || 'Could not save your choice.')
     } finally {
@@ -316,8 +307,12 @@ export default function AuthGate() {
     return <AgentApp profile={profile} onSignOut={handleSignOut} />
   }
 
+  if (screen === 'coordinator' && profile) {
+    return <CoordinatorPage profile={profile} onSignOut={handleSignOut} />
+  }
+
   if (screen === 'edi' && profile) {
-    return <EdiHold profile={profile} onSignOut={handleSignOut} />
+    return <EdiDashboard profile={profile} onSignOut={handleSignOut} />
   }
 
   if (screen === 'needName') {

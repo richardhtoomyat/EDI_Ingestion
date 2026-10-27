@@ -117,7 +117,7 @@ function gaps(item) {
   return missing
 }
 
-export default function EdiDashboard() {
+export default function EdiDashboard({ profile, onSignOut }) {
   const [tab, setTab] = useState('board')
   const [items, setItems] = useState(DUMMY)
   const [query, setQuery] = useState('')
@@ -125,6 +125,7 @@ export default function EdiDashboard() {
   const [agent, setAgent] = useState('all')
   const [openId, setOpenId] = useState('')
   const [dragOver, setDragOver] = useState('')
+  const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
   const agents = [...new Set(items.map((item) => item.agent))].sort()
   const rows = useMemo(() => items.filter((item) => {
     const haystack = `${item.company} ${item.email} ${item.agent}`.toLowerCase()
@@ -154,15 +155,19 @@ export default function EdiDashboard() {
   return (
     <Shell title="EDI Portal">
       <main className="page edi-page">
+        {welcome && <p className="welcome-line">Welcome, {welcome}</p>}
         <div className="dash-top">
           <div>
             <h2 className="dash-title">{tab === 'team' ? 'EDI team' : tab === 'calendar' ? 'Kickoff calendar' : 'All onboardings'}</h2>
             <p className="intro">Dummy data for the EDI portal. It will be cleared when this connects to the database.</p>
           </div>
-          <div className="edi-tabs" role="tablist">
-            {[['board', 'Onboardings'], ['team', 'Team'], ['calendar', 'Kickoff']].map(([value, label]) => (
-              <button key={value} type="button" role="tab" aria-selected={tab === value} className={`secondary edi-tab${tab === value ? ' active' : ''}`} onClick={() => setTab(value)}>{label}</button>
-            ))}
+          <div className="actions">
+            {onSignOut && <button type="button" className="secondary" onClick={onSignOut}>Sign out</button>}
+            <div className="edi-tabs" role="tablist">
+              {[['board', 'Onboardings'], ['team', 'Team'], ['calendar', 'Kickoff']].map(([value, label]) => (
+                <button key={value} type="button" role="tab" aria-selected={tab === value} className={`secondary edi-tab${tab === value ? ' active' : ''}`} onClick={() => setTab(value)}>{label}</button>
+              ))}
+            </div>
           </div>
         </div>
 
