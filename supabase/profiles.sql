@@ -16,3 +16,8 @@ create policy "read own profile"
 create policy "insert own profile once"
   on public.profiles for insert
   with check (auth.uid() = id and role in ('sale', 'edi', 'coordinator'));
+
+create policy "update own profile"
+  on public.profiles for update
+  using (auth.uid() = id)
+  with check (auth.uid() = id);

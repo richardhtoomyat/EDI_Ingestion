@@ -8,7 +8,7 @@ function formatSubmitted(value) {
   return new Date(value).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export default function CoordinatorPage({ profile, onSignOut }) {
+export default function CoordinatorPage({ profile, onSignOut, onAccount }) {
   const [items, setItems] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -16,7 +16,7 @@ export default function CoordinatorPage({ profile, onSignOut }) {
   const open = items.find((item) => item.id === openId)
   const [qa, setQa] = useState('')
   const [prod, setProd] = useState('')
-  const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
+  const firstName = profile?.firstName || ''
   const assigned = items.filter((item) => item.traderIdQa && item.traderIdProd).length
 
   const refresh = async () => {
@@ -57,9 +57,14 @@ export default function CoordinatorPage({ profile, onSignOut }) {
   }
 
   return (
-    <Shell title="EDI Coordinator" onSignOut={onSignOut}>
+    <Shell
+      title="EDI Coordinator"
+      subtitle={firstName ? `Welcome, ${firstName}` : ''}
+      profile={profile}
+      onSignOut={onSignOut}
+      onAccount={onAccount}
+    >
       <main className="page edi-page">
-        {welcome && <p className="welcome-line">Welcome, {welcome}</p>}
         <div className="dash-top">
           <div>
             <h2 className="dash-title">Submitted onboardings</h2>

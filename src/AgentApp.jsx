@@ -62,9 +62,9 @@ function CopyFormIdButton({ id }) {
   return <button type="button" className="secondary" onClick={copy}>{copied ? 'Copied' : 'Copy form ID'}</button>
 }
 
-function Dashboard({ profile, records, error, onCreate, onView, onSignOut }) {
+function Dashboard({ profile, records, error, onCreate, onView, onSignOut, onAccount }) {
   const [query, setQuery] = useState('')
-  const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
+  const firstName = profile?.firstName || ''
   const needle = query.trim().toLowerCase()
   const filtered = !needle
     ? records
@@ -79,9 +79,14 @@ function Dashboard({ profile, records, error, onCreate, onView, onSignOut }) {
     })
 
   return (
-    <Shell title="EDI Sales Agent" onSignOut={onSignOut}>
+    <Shell
+      title="EDI Sales Agent"
+      subtitle={firstName ? `Welcome, ${firstName}` : ''}
+      profile={profile}
+      onSignOut={onSignOut}
+      onAccount={onAccount}
+    >
       <main className="page">
-        {welcome && <p className="welcome-line">Welcome, {welcome}</p>}
         <div className="dash-top">
           <h2 className="dash-title">Onboardings</h2>
           <div className="actions">
@@ -831,7 +836,7 @@ export function SalesFormPreview() {
   )
 }
 
-export default function AgentApp({ profile, onSignOut }) {
+export default function AgentApp({ profile, onSignOut, onAccount }) {
   const [view, setView] = useState('dashboard')
   const [records, setRecords] = useState([])
   const [loadError, setLoadError] = useState('')
@@ -868,6 +873,7 @@ export default function AgentApp({ profile, onSignOut }) {
       onCreate={() => { setEditing(null); setView('create') }}
       onView={(record) => { setEditing(record); setView('edit') }}
       onSignOut={onSignOut}
+      onAccount={onAccount}
     />
   )
 }

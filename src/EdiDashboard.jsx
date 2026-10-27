@@ -399,7 +399,7 @@ export function EdiDashboardPreview() {
   )
 }
 
-export default function EdiDashboard({ profile, onSignOut }) {
+export default function EdiDashboard({ profile, onSignOut, onAccount }) {
   const [tab, setTab] = useState('board')
   const [records, setRecords] = useState([])
   const [team, setTeam] = useState([])
@@ -571,7 +571,9 @@ export default function EdiDashboard({ profile, onSignOut }) {
     <Shell
       title="EDI Portal"
       subtitle={firstName ? `Welcome, ${firstName}` : (welcome ? `Welcome, ${welcome}` : '')}
+      profile={profile}
       onSignOut={onSignOut}
+      onAccount={onAccount}
       nav={headerNav}
     >
       <main className="page edi-page">

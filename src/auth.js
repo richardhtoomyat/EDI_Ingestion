@@ -120,6 +120,31 @@ export async function saveProfile({ userId, email, firstName, lastName, role }) 
   }
 }
 
+export async function updateProfile({ userId, firstName, lastName }) {
+  const first = firstName.trim()
+  const last = lastName.trim()
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      first_name: first,
+      last_name: last,
+    })
+    .eq('id', userId)
+    .select('id, email, first_name, last_name, role')
+    .single()
+  if (error) throw error
+  await supabase.auth.updateUser({
+    data: { first_name: first, last_name: last, name: `${first} ${last}`.trim() },
+  }).catch(() => {})
+  return {
+    id: data.id,
+    email: data.email,
+    firstName: data.first_name,
+    lastName: data.last_name,
+    role: data.role,
+  }
+}
+
 export async function accessToken() {
   const session = await getSession()
   return session?.access_token || ''

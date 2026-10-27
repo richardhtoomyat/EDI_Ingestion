@@ -7,6 +7,16 @@ import { EdiDashboardPreview } from './EdiDashboard.jsx'
 import { customerRoute, readCustomerDraft } from './onboardingLink.js'
 import './styles.css'
 
+;(() => {
+  const stored = localStorage.getItem('edi-theme')
+  const theme = stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
+  const resolved = theme === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : theme
+  document.documentElement.dataset.theme = resolved
+  document.documentElement.style.colorScheme = resolved
+})()
+
 function Root() {
   const route = customerRoute()
   const [screen, setScreen] = useState(

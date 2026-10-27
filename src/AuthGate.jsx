@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Shell, Chevron } from './chrome.jsx'
+import { AccountPage } from './AccountMenu.jsx'
 import AgentApp from './AgentApp.jsx'
 import CoordinatorPage from './CoordinatorPage.jsx'
 import EdiDashboard from './EdiDashboard.jsx'
@@ -132,6 +133,7 @@ export default function AuthGate() {
   const [lastName, setLastName] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [accountReturn, setAccountReturn] = useState(null)
 
   const rejectSession = async (message) => {
     await signOut().catch(() => {})
@@ -291,6 +293,7 @@ export default function AuthGate() {
       await signOut()
       setSession(null)
       setProfile(null)
+      setAccountReturn(null)
       setScreen('signedOut')
     } catch (err) {
       setError(err.message || 'Could not sign out.')
@@ -299,20 +302,48 @@ export default function AuthGate() {
     }
   }
 
+  const openAccount = () => {
+    setAccountReturn(screen)
+    setScreen('account')
+  }
+
   if (screen === 'loading') {
     return <p className="page intro">Loading…</p>
   }
 
+  if (screen === 'account' && profile) {
+    return (
+      <Shell
+        title="Account"
+        subtitle={profile.firstName ? `Welcome, ${profile.firstName}` : ''}
+        profile={profile}
+        onSignOut={handleSignOut}
+        onAccount={() => {}}
+      >
+        <AccountPage
+          profile={profile}
+          onSaved={(next) => {
+            setProfile(next)
+            setFirstName(next.firstName)
+            setLastName(next.lastName)
+          }}
+          onBack={() => setScreen(accountReturn || screenForRole(profile.role))}
+          onSignOut={handleSignOut}
+        />
+      </Shell>
+    )
+  }
+
   if (screen === 'sale' && profile) {
-    return <AgentApp profile={profile} onSignOut={handleSignOut} />
+    return <AgentApp profile={profile} onSignOut={handleSignOut} onAccount={openAccount} />
   }
 
   if (screen === 'coordinator' && profile) {
-    return <CoordinatorPage profile={profile} onSignOut={handleSignOut} />
+    return <CoordinatorPage profile={profile} onSignOut={handleSignOut} onAccount={openAccount} />
   }
 
   if (screen === 'edi' && profile) {
-    return <EdiDashboard profile={profile} onSignOut={handleSignOut} />
+    return <EdiDashboard profile={profile} onSignOut={handleSignOut} onAccount={openAccount} />
   }
 
   if (screen === 'needName') {
