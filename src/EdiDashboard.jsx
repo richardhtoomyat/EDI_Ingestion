@@ -21,6 +21,12 @@ const EDI_STAGES = [
   { value: 'production', label: 'Production' },
 ]
 
+const PHASES = {
+  backlog: { value: 'backlog', label: 'Backlog', order: 0 },
+  'in-progress': { value: 'in-progress', label: 'In Progress', order: 1 },
+  complete: { value: 'complete', label: 'Complete', order: 2 },
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000
 
 function personName(team, id) {
@@ -82,6 +88,12 @@ function isDoneStatus(status) {
   return status === 'production'
 }
 
+function phaseForStatus(status) {
+  if (status === 'started' || status === 'test') return PHASES['in-progress']
+  if (status === 'production' || status === 'completed') return PHASES.complete
+  return PHASES.backlog
+}
+
 function recordToItem(record) {
   const draft = record.draft || {}
   const submission = record.submission || {}
@@ -97,6 +109,7 @@ function recordToItem(record) {
     created: formatCreated(record.createdAt),
     createdAt: record.createdAt || 0,
     status: deriveStatus(record),
+    phase: phaseForStatus(deriveStatus(record)),
     kickoff,
     technicalContact: tech.developerName || '',
     technicalEmail: tech.email || '',
@@ -212,6 +225,7 @@ function OnboardingTable({ rows, team, onOpen, draggable = false }) {
     <table className="edi-table">
       <colgroup>
         <col className="edi-col-customer" />
+        <col className="edi-col-phase" />
         <col className="edi-col-status" />
         <col className="edi-col-flags" />
         <col className="edi-col-action" />
@@ -219,6 +233,7 @@ function OnboardingTable({ rows, team, onOpen, draggable = false }) {
       <thead>
         <tr>
           <th>Customer</th>
+          <th>Phase</th>
           <th>Status</th>
           <th>Flags</th>
           <th />
@@ -232,6 +247,7 @@ function OnboardingTable({ rows, team, onOpen, draggable = false }) {
             onDragStart={draggable ? (event) => event.dataTransfer.setData('text/plain', item.id) : undefined}
           >
             <td><strong>{item.company}</strong><div className="intro">{item.email}</div></td>
+            <td><span className={`edi-pill phase-${item.phase.value}`}>{item.phase.label}</span></td>
             <td><span className={`edi-pill ${item.status}`}>{statusLabel(item.status, item, team)}</span></td>
             <td>{gaps(item).map((flag) => <span key={flag} className="edi-flag">{flag}</span>)}</td>
             <td><button type="button" className="secondary status-edit" onClick={() => onOpen(item.id)}>Open</button></td>
@@ -422,9 +438,8 @@ export default function EdiDashboard({ profile, onSignOut }) {
 
   const items = useMemo(() => records.map(recordToItem), [records])
   const sortBoard = (list) => [...list].sort((a, b) => {
-    const aDone = isDoneStatus(a.status) ? 1 : 0
-    const bDone = isDoneStatus(b.status) ? 1 : 0
-    if (aDone !== bDone) return aDone - bDone
+    const phaseDiff = (a.phase?.order ?? 0) - (b.phase?.order ?? 0)
+    if (phaseDiff !== 0) return phaseDiff
     return (b.createdAt || 0) - (a.createdAt || 0)
   })
   const rows = useMemo(() => {

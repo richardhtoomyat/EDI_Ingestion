@@ -431,12 +431,18 @@ button.edi-tab.active, button.edi-tab.active:hover { background: var(--black); c
 .edi-table { margin-top: 8px; table-layout: fixed; width: 100%; }
 .edi-table tr { cursor: grab; }
 .edi-table th { width: auto; }
-.edi-col-customer { width: 42%; }
+.edi-col-customer { width: 36%; }
+.edi-col-phase { width: 7.5rem; }
 .edi-col-status { width: 11.5rem; }
 .edi-col-flags { width: auto; }
 .edi-col-action { width: 5.5rem; }
+.edi-table td:nth-child(2),
+.edi-table th:nth-child(2),
 .edi-table td:nth-child(3),
 .edi-table th:nth-child(3) { white-space: nowrap; }
+.edi-pill.phase-backlog { background: #fff8e8; color: #9a6700; }
+.edi-pill.phase-in-progress { background: #e8f4ff; color: #0b6bcb; }
+.edi-pill.phase-complete { background: #eef8f0; color: #1b7a35; }
 .edi-table td:last-child,
 .edi-table th:last-child { text-align: right; width: 5.5rem; }
 .edi-pill { display: inline-block; padding: 2px 8px; font-size: .75rem; font-weight: 600; background: var(--bg); }
