@@ -24,8 +24,10 @@ body { margin: 0; background: #fff; font-size: 16px; line-height: 1.5; -webkit-f
 }
 .app-shell-body { flex: 1 0 auto; width: 100%; }
 .site-header { background: #fff; border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.site-header-inner { width: 100%; max-width: none; margin: 0; padding: 12px 24px; display: flex; align-items: center; gap: 20px; }
-.site-title { flex: 1; min-width: 0; }
+.site-header-inner { width: 100%; max-width: none; margin: 0; padding: 12px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.site-title { min-width: 0; font-weight: 500; color: var(--grey); font-size: .9rem; white-space: nowrap; }
+.site-header-nav { flex: 1 1 auto; display: flex; justify-content: center; min-width: 0; }
+.site-header-nav .header-tabs { flex-wrap: wrap; justify-content: center; }
 button.header-signout,
 button.header-signout:hover,
 button.header-signout:active {
@@ -36,7 +38,6 @@ button.header-signout:active {
   box-shadow: none;
 }
 .logo { height: 36px; width: auto; display: block; }
-.site-title { margin-left: auto; font-weight: 500; color: var(--grey); font-size: .9rem; }
 .site-footer { background: var(--black); color: #fff; padding: 28px 20px; text-align: center; font-size: .85rem; flex-shrink: 0; margin-top: auto; width: 100%; }
 .site-footer p { margin: 4px 0; }
 .site-footer a { color: var(--orange); }
@@ -434,6 +435,11 @@ fieldset.locked-fields .inline { color: #6b6e73; }
 .edi-tabs { display: flex; gap: 8px; }
 button.edi-tab, button.edi-tab:hover, button.edi-tab:active { transform: none; box-shadow: none; }
 button.edi-tab.active, button.edi-tab.active:hover { background: var(--black); color: #fff; border-color: var(--black); }
+.header-tabs button.edi-tab {
+  padding: 8px 12px;
+  font-size: .85rem;
+  white-space: nowrap;
+}
 .edi-table { margin-top: 8px; table-layout: fixed; width: 100%; }
 .edi-table tr { cursor: grab; }
 .edi-table th { width: auto; }

@@ -549,19 +549,29 @@ export default function EdiDashboard({ profile, onSignOut }) {
     )
   }
 
+  const headerNav = (
+    <div className="edi-tabs header-tabs" role="tablist">
+      {[['board', 'Onboardings'], ['mine', 'My Assignment'], ['team', 'Team'], ['calendar', 'Kickoff'], ['kpi', 'KPIs']].map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          aria-selected={tab === value}
+          className={`secondary edi-tab${tab === value ? ' active' : ''}`}
+          onClick={() => setTab(value)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
-    <Shell title="EDI Portal" onSignOut={onSignOut}>
+    <Shell title="EDI Portal" onSignOut={onSignOut} nav={headerNav}>
       <main className="page edi-page">
         {welcome && <p className="welcome-line">Welcome, {welcome}</p>}
         <div className="dash-top">
-          <div>
-            <h2 className="dash-title">{tabTitle}</h2>
-          </div>
-          <div className="edi-tabs" role="tablist">
-            {[['board', 'Onboardings'], ['mine', 'My Assignment'], ['team', 'Team'], ['calendar', 'Kickoff'], ['kpi', 'KPIs']].map(([value, label]) => (
-              <button key={value} type="button" role="tab" aria-selected={tab === value} className={`secondary edi-tab${tab === value ? ' active' : ''}`} onClick={() => setTab(value)}>{label}</button>
-            ))}
-          </div>
+          <h2 className="dash-title">{tabTitle}</h2>
         </div>
 
         {loadError && <div className="banner err" role="alert">{loadError}</div>}
