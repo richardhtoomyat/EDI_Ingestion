@@ -1,18 +1,81 @@
-import { PARTY_FIELDS, initialState } from './formConfig.js'
+import { DEVELOPER_FIELDS, PARTY_FIELDS, SERVICES, TRANSACTION_SETS, initialState } from './formConfig.js'
+
+function emptySftpDetails() {
+  return { ...initialState().sftpDetails }
+}
+
+export function emptyAuthorization() {
+  return { ...initialState().authorization }
+}
 import { accessToken } from './auth.js'
 
+const SERVICE_VALUES = new Set(SERVICES.map((service) => service.value))
+const SET_CODES = new Set(TRANSACTION_SETS.map((item) => item.code))
+
 const party = () => ({ ...Object.fromEntries(PARTY_FIELDS.map((field) => [field.name, ''])), accountSystem: '' })
+const developer = () => Object.fromEntries(DEVELOPER_FIELDS.map((field) => [field.name, '']))
+
+export function emptyCustomerDetails() {
+  return {
+    as400AccountNumber: '',
+    as400AccountNumberTest: '',
+    truckmateId: '',
+    truckmateIdQa: '',
+    oracleId: '',
+    oracleIdQa: '',
+    companyName: '',
+    addressCountry: 'ca',
+    address: '',
+    city: '',
+    region: '',
+    postal: '',
+    businessContactName: '',
+    businessContactPhone: '',
+    businessContactEmail: '',
+  }
+}
+
+export function emptyDeveloper() {
+  return developer()
+}
+
+export function padAs400(value) {
+  const core = String(value || '').replace(/\D/g, '').replace(/^0+/, '').slice(0, 7)
+  return core ? core.padStart(7, '0') : ''
+}
 
 export function emptyDraft() {
   return {
     customerEmail: '',
+    technowRequestId: '',
     type: 'New',
     services: [],
     mainAccount: party(),
     logisticsProvider: party(),
+    customerDetails: emptyCustomerDetails(),
+    developer: emptyDeveloper(),
+    sets: [],
+    hosting: '',
+    as2: false,
+    as2Certificate: null,
+    sftp: false,
+    sftpDetails: emptySftpDetails(),
+    authorization: emptyAuthorization(),
+    normalStatuses: [],
+    normalCodes: {},
+    normalOpen: [],
+    exceptionStatuses: [],
+    exceptionCodes: {},
+    exceptionOpen: [],
     additionalLocations: '',
     paymentHouse: { companyName: '', contactName: '' },
   }
+}
+
+function normalizeHosting(draft) {
+  if (draft?.hosting === 'dayross' || draft?.hosting === 'customer') return draft.hosting
+  if (draft?.sftp || draft?.as2) return 'customer'
+  return ''
 }
 
 export function mergePrefill(draft) {
@@ -23,9 +86,27 @@ export function mergePrefill(draft) {
   return {
     ...base,
     type: draft.type === 'Revised' ? 'Revised' : 'New',
-    services: Array.isArray(draft.services) ? draft.services.filter((value) => value === 'ltl-tl' || value === 'commerce') : [],
+    services: Array.isArray(draft.services) ? draft.services.filter((value) => SERVICE_VALUES.has(value)) : [],
+    technowRequestId: draft.technowRequestId || '',
     mainAccount,
     logisticsProvider: { ...base.logisticsProvider, ...(draft.logisticsProvider || {}) },
+    customerDetails: { ...emptyCustomerDetails(), ...(draft.customerDetails || {}) },
+    developer: { ...base.developer, ...(draft.developer || {}) },
+    sets: Array.isArray(draft.sets) ? draft.sets.filter((code) => SET_CODES.has(code)) : [],
+    hosting: normalizeHosting(draft),
+    as2: Boolean(draft.as2) && normalizeHosting(draft) === 'customer',
+    as2Certificate: draft.as2Certificate && typeof draft.as2Certificate === 'object'
+      ? draft.as2Certificate
+      : null,
+    sftp: Boolean(draft.sftp) && normalizeHosting(draft) === 'customer',
+    sftpDetails: { ...base.sftpDetails, ...(draft.sftpDetails || {}) },
+    authorization: { ...base.authorization, ...(draft.authorization || {}) },
+    normalStatuses: Array.isArray(draft.normalStatuses) ? draft.normalStatuses : [],
+    normalCodes: draft.normalCodes && typeof draft.normalCodes === 'object' ? draft.normalCodes : {},
+    normalOpen: Array.isArray(draft.normalOpen) ? draft.normalOpen : [],
+    exceptionStatuses: Array.isArray(draft.exceptionStatuses) ? draft.exceptionStatuses : [],
+    exceptionCodes: draft.exceptionCodes && typeof draft.exceptionCodes === 'object' ? draft.exceptionCodes : {},
+    exceptionOpen: Array.isArray(draft.exceptionOpen) ? draft.exceptionOpen : [],
     additionalLocations: draft.additionalLocations || '',
     paymentHouse: { ...base.paymentHouse, ...(draft.paymentHouse || {}) },
   }
@@ -53,6 +134,7 @@ export function onboardingUrl(record) {
 
 export function customerRoute() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (path === '/dev/sale') return { kind: 'salePreview' }
   if (path === '/' || path === '/edi' || path === '/coordinator') return { kind: 'agent' }
   if (path.startsWith('/c/')) {
     const token = decodeURIComponent(path.slice(3))
@@ -111,6 +193,15 @@ export function saveOnboarding(draft) {
 
 export function updateOnboarding(id, draft) {
   return sendOnboarding('/api/onboardings', 'PATCH', { id, draft })
+}
+
+export function updateTraderIds(id, { traderIdQa, traderIdProd }) {
+  return sendOnboarding('/api/onboardings', 'PATCH', { id, traderIdQa, traderIdProd })
+}
+
+export function traderLabel(value) {
+  const text = String(value || '').trim()
+  return text || 'Not available'
 }
 
 export function saveSubmission(token, submission) {

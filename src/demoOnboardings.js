@@ -5,10 +5,28 @@ const party = () => ({ ...Object.fromEntries(PARTY_FIELDS.map((field) => [field.
 function emptyDraft() {
   return {
     customerEmail: '',
+    technowRequestId: '',
     type: 'New',
     services: [],
     mainAccount: party(),
     logisticsProvider: party(),
+    customerDetails: {
+      as400AccountNumber: '',
+      as400AccountNumberTest: '',
+      truckmateId: '',
+      truckmateIdQa: '',
+      oracleId: '',
+      oracleIdQa: '',
+      companyName: '',
+      addressCountry: 'ca',
+      address: '',
+      city: '',
+      region: '',
+      postal: '',
+      businessContactName: '',
+      businessContactPhone: '',
+      businessContactEmail: '',
+    },
     additionalLocations: '',
     paymentHouse: { companyName: '', contactName: '' },
   }
@@ -28,8 +46,9 @@ export const DEMO_ONBOARDINGS = [
   demoRecord('demo-amazon', Date.parse('2026-10-20T12:00:00'), {
     ...emptyDraft(),
     customerEmail: 'edi@amazon.com',
+    technowRequestId: 'TW-10421',
     type: 'New',
-    services: ['ltl-tl'],
+    services: ['ltl', 'truckload'],
     mainAccount: {
       ...party(),
       accountNumber: '1002041',
@@ -46,8 +65,9 @@ export const DEMO_ONBOARDINGS = [
   demoRecord('demo-walmart', Date.parse('2026-10-21T12:00:00'), {
     ...emptyDraft(),
     customerEmail: 'edi@walmart.com',
+    technowRequestId: 'TW-10488',
     type: 'New',
-    services: ['commerce'],
+    services: ['home-delivery'],
     mainAccount: {
       ...party(),
       accountNumber: '0008841',

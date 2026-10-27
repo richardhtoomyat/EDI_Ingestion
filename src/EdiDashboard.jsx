@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Shell } from './chrome.jsx'
+import { loadOnboardings } from './onboardingLink.js'
 
 const TEAM = [
   { id: 'priya', firstName: 'Priya', lastName: 'Shah', email: 'priya.shah@dayross.com' },
@@ -7,94 +8,9 @@ const TEAM = [
   { id: 'lena', firstName: 'Lena', lastName: 'Cho', email: 'lena.cho@dayross.com' },
 ]
 
-const DUMMY = [
-  {
-    id: 'amazon',
-    company: 'Amazon',
-    email: 'edi@amazon.com',
-    agent: 'Maya Chen',
-    created: 'Oct 20, 2026',
-    status: 'submitted',
-    kickoff: ['Nov 9 – 15', 'Nov 16 – 22'],
-    technicalContact: 'Ada Lovelace',
-    mobileVerified: true,
-    ownerId: 'priya',
-    note: '',
-    codes: [
-      { name: 'Depart Shipper', at701: 'ZZ', at702: 'NS', custom: ['at701'] },
-      { name: 'Out for Delivery', at701: 'X6', at702: 'NS', custom: [] },
-      { name: 'Refused', at701: 'A7', at702: 'BS', custom: [] },
-    ],
-  },
-  {
-    id: 'walmart',
-    company: 'Walmart',
-    email: 'edi@walmart.com',
-    agent: 'Chris Patel',
-    created: 'Oct 21, 2026',
-    status: 'in-progress',
-    kickoff: ['Nov 9 – 15'],
-    technicalContact: '',
-    mobileVerified: false,
-    ownerId: '',
-    note: '',
-    codes: [
-      { name: 'Arrive Consignee', at701: 'X1', at702: 'NS', custom: [] },
-    ],
-  },
-  {
-    id: 'canadiantire',
-    company: 'Canadian Tire',
-    email: 'edi@canadiantire.ca',
-    agent: 'Maya Chen',
-    created: 'Oct 22, 2026',
-    status: 'submitted',
-    kickoff: [],
-    technicalContact: 'Sam Roy',
-    mobileVerified: true,
-    ownerId: '',
-    note: '',
-    codes: [
-      { name: 'Picked up', at701: 'CP', at702: 'NS', custom: [] },
-      { name: 'Weather Delay', at701: 'SD', at702: 'WX', custom: ['at702'] },
-    ],
-  },
-  {
-    id: 'loblaw',
-    company: 'Loblaw',
-    email: 'edi@loblaw.ca',
-    agent: 'Chris Patel',
-    created: 'Oct 24, 2026',
-    status: 'link-sent',
-    kickoff: [],
-    technicalContact: '',
-    mobileVerified: false,
-    ownerId: 'owen',
-    note: '',
-    codes: [],
-  },
-  {
-    id: 'costco',
-    company: 'Costco',
-    email: 'edi@costco.ca',
-    agent: 'Maya Chen',
-    created: 'Oct 25, 2026',
-    status: 'submitted',
-    kickoff: ['Nov 23 – 29'],
-    technicalContact: 'Jordan Lee',
-    mobileVerified: false,
-    ownerId: '',
-    note: '',
-    codes: [
-      { name: 'Complete Delivery', at701: 'D1', at702: 'OK', custom: ['at702'] },
-    ],
-  },
-]
-
 const STATUSES = [
   { value: 'all', label: 'All statuses' },
   { value: 'link-sent', label: 'Link sent' },
-  { value: 'in-progress', label: 'In progress' },
   { value: 'submitted', label: 'Submitted' },
   { value: 'ready', label: 'Ready for setup' },
   { value: 'returned', label: 'Returned to sales' },
@@ -109,8 +25,43 @@ function personName(team, id) {
   return person ? `${person.firstName} ${person.lastName}` : ''
 }
 
+function formatCreated(value) {
+  return new Date(value).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function recordToItem(record, overlays = {}) {
+  const overlay = overlays[record.id] || {}
+  const draft = record.draft || {}
+  const kickoff = Array.isArray(draft.kickoffWeeks) ? draft.kickoffWeeks : []
+  const technicalContact = draft.developer?.name || ''
+  const mobileVerified = Boolean(draft.developer?.mobileVerified)
+  return {
+    id: record.id,
+    company: record.companyName || '—',
+    email: record.customerEmail || '',
+    agent: record.agentName || '—',
+    created: formatCreated(record.createdAt),
+    status: overlay.status || (record.submitted ? 'submitted' : 'link-sent'),
+    kickoff,
+    technicalContact,
+    mobileVerified,
+    ownerId: overlay.ownerId || '',
+    note: overlay.note || '',
+    needsAt7Mapping: Boolean(record.needsAt7Mapping),
+    at7CustomCount: record.at7CustomCount || 0,
+    codes: (record.at7Codes || []).map((code) => ({
+      name: code.name,
+      at701: code.at701,
+      at702: code.at702,
+      custom: code.custom || [],
+      isCustom: Boolean(code.isCustom),
+    })),
+  }
+}
+
 function gaps(item) {
   const missing = []
+  if (item.needsAt7Mapping) missing.push(`Custom AT7 mapping${item.at7CustomCount ? ` (${item.at7CustomCount})` : ''}`)
   if (!item.kickoff.length) missing.push('No kickoff weeks')
   if (!item.technicalContact) missing.push('No EDI technical contact')
   if (!item.mobileVerified) missing.push('Mobile not verified')
@@ -119,21 +70,49 @@ function gaps(item) {
 
 export default function EdiDashboard({ profile, onSignOut }) {
   const [tab, setTab] = useState('board')
-  const [items, setItems] = useState(DUMMY)
+  const [records, setRecords] = useState([])
+  const [overlays, setOverlays] = useState({})
+  const [loadError, setLoadError] = useState('')
+  const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [agent, setAgent] = useState('all')
+  const [mappingOnly, setMappingOnly] = useState(false)
   const [openId, setOpenId] = useState('')
   const [dragOver, setDragOver] = useState('')
   const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
-  const agents = [...new Set(items.map((item) => item.agent))].sort()
+
+  useEffect(() => {
+    let cancel = false
+    setLoading(true)
+    loadOnboardings()
+      .then((next) => {
+        if (cancel) return
+        setRecords(next)
+        setLoadError('')
+      })
+      .catch((error) => {
+        if (cancel) return
+        setLoadError(error.message)
+        setRecords([])
+      })
+      .finally(() => { if (!cancel) setLoading(false) })
+    return () => { cancel = true }
+  }, [])
+
+  const items = useMemo(
+    () => records.map((record) => recordToItem(record, overlays)),
+    [records, overlays],
+  )
+  const agents = [...new Set(items.map((item) => item.agent).filter(Boolean))].sort()
   const rows = useMemo(() => items.filter((item) => {
     const haystack = `${item.company} ${item.email} ${item.agent}`.toLowerCase()
     if (query.trim() && !haystack.includes(query.trim().toLowerCase())) return false
     if (status !== 'all' && item.status !== status) return false
     if (agent !== 'all' && item.agent !== agent) return false
+    if (mappingOnly && !item.needsAt7Mapping) return false
     return true
-  }), [items, query, status, agent])
+  }), [items, query, status, agent, mappingOnly])
   const open = items.find((item) => item.id === openId)
   const weeks = useMemo(() => {
     const map = new Map()
@@ -143,8 +122,8 @@ export default function EdiDashboard({ profile, onSignOut }) {
     return [...map.entries()]
   }, [items])
 
-  const assign = (id, ownerId) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ownerId } : item)))
-  const patch = (id, next) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ...next } : item)))
+  const assign = (id, ownerId) => setOverlays((current) => ({ ...current, [id]: { ...current[id], ownerId } }))
+  const patch = (id, next) => setOverlays((current) => ({ ...current, [id]: { ...current[id], ...next } }))
   const onDropOwner = (ownerId) => (event) => {
     event.preventDefault()
     const id = event.dataTransfer.getData('text/plain')
@@ -159,7 +138,7 @@ export default function EdiDashboard({ profile, onSignOut }) {
         <div className="dash-top">
           <div>
             <h2 className="dash-title">{tab === 'team' ? 'EDI team' : tab === 'calendar' ? 'Kickoff calendar' : 'All onboardings'}</h2>
-            <p className="intro">Dummy data for the EDI portal. It will be cleared when this connects to the database.</p>
+            <p className="intro">Onboardings from the database. Custom AT7-01/AT7-02 values are flagged for EDI mapping.</p>
           </div>
           <div className="actions">
             {onSignOut && <button type="button" className="secondary" onClick={onSignOut}>Sign out</button>}
@@ -171,12 +150,15 @@ export default function EdiDashboard({ profile, onSignOut }) {
           </div>
         </div>
 
-        {tab === 'board' && (
+        {loadError && <div className="banner err" role="alert">{loadError}</div>}
+        {loading && <p className="intro">Loading onboardings…</p>}
+
+        {tab === 'board' && !loading && (
           <>
             <div className="edi-stats">
               <div><b>{items.length}</b><span>Onboardings</span></div>
+              <div><b>{items.filter((item) => item.needsAt7Mapping).length}</b><span>Need AT7 mapping</span></div>
               <div><b>{items.filter((item) => gaps(item).length).length}</b><span>Need attention</span></div>
-              <div><b>{items.filter((item) => item.status === 'ready').length}</b><span>Ready for setup</span></div>
               <div><b>{items.filter((item) => item.ownerId).length}</b><span>In a workbucket</span></div>
             </div>
             <section className="card">
@@ -198,36 +180,44 @@ export default function EdiDashboard({ profile, onSignOut }) {
                     {agents.map((name) => <option key={name} value={name}>{name}</option>)}
                   </select>
                 </label>
+                <label className="field checkbox">
+                  <span>AT7 mapping only</span>
+                  <input type="checkbox" checked={mappingOnly} onChange={(event) => setMappingOnly(event.target.checked)} />
+                </label>
               </div>
-              <table className="edi-table">
-                <thead>
-                  <tr>
-                    <th>Customer</th>
-                    <th>Sales agent</th>
-                    <th>Working</th>
-                    <th>Status</th>
-                    <th>Flags</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((item) => (
-                    <tr key={item.id} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', item.id)}>
-                      <td><strong>{item.company}</strong><div className="intro">{item.email}</div></td>
-                      <td>{item.agent}</td>
-                      <td>{personName(TEAM, item.ownerId) || '—'}</td>
-                      <td><span className={`edi-pill ${item.status}`}>{statusLabel(item.status)}</span></td>
-                      <td>{gaps(item).map((flag) => <span key={flag} className="edi-flag">{flag}</span>)}</td>
-                      <td><button type="button" className="secondary status-edit" onClick={() => setOpenId(item.id)}>Open</button></td>
+              {rows.length === 0 ? (
+                <p className="intro">No onboardings match these filters.</p>
+              ) : (
+                <table className="edi-table">
+                  <thead>
+                    <tr>
+                      <th>Customer</th>
+                      <th>Sales agent</th>
+                      <th>Working</th>
+                      <th>Status</th>
+                      <th>Flags</th>
+                      <th />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {rows.map((item) => (
+                      <tr key={item.id} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', item.id)}>
+                        <td><strong>{item.company}</strong><div className="intro">{item.email}</div></td>
+                        <td>{item.agent}</td>
+                        <td>{personName(TEAM, item.ownerId) || '—'}</td>
+                        <td><span className={`edi-pill ${item.status}`}>{statusLabel(item.status)}</span></td>
+                        <td>{gaps(item).map((flag) => <span key={flag} className="edi-flag">{flag}</span>)}</td>
+                        <td><button type="button" className="secondary status-edit" onClick={() => setOpenId(item.id)}>Open</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </section>
           </>
         )}
 
-        {tab === 'team' && (
+        {tab === 'team' && !loading && (
           <div className="workbuckets">
             {TEAM.map((person) => {
               const bucket = items.filter((item) => item.ownerId === person.id)
@@ -247,6 +237,7 @@ export default function EdiDashboard({ profile, onSignOut }) {
                     <button key={item.id} type="button" className="bucket-card" draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', item.id)} onClick={() => setOpenId(item.id)}>
                       <strong>{item.company}</strong>
                       <span>{item.agent}</span>
+                      {item.needsAt7Mapping && <span className="edi-flag">Custom AT7</span>}
                     </button>
                   ))}
                 </section>
@@ -264,24 +255,29 @@ export default function EdiDashboard({ profile, onSignOut }) {
                 <button key={item.id} type="button" className="bucket-card" draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', item.id)} onClick={() => setOpenId(item.id)}>
                   <strong>{item.company}</strong>
                   <span>{item.agent}</span>
+                  {item.needsAt7Mapping && <span className="edi-flag">Custom AT7</span>}
                 </button>
               ))}
             </section>
           </div>
         )}
 
-        {tab === 'calendar' && (
+        {tab === 'calendar' && !loading && (
           <section className="card">
             <h3>Shared kickoff weeks</h3>
-            <div className="kickoff-board">
-              {weeks.map(([week, customers]) => (
-                <article key={week} className={customers.length > 1 ? 'clash' : ''}>
-                  <strong>{week}</strong>
-                  {customers.length > 1 && <span className="edi-flag">Two customers this week</span>}
-                  {customers.map((item) => <p key={item.id}>{item.company}<span>{personName(TEAM, item.ownerId) || item.agent}</span></p>)}
-                </article>
-              ))}
-            </div>
+            {weeks.length === 0 ? (
+              <p className="intro">No kickoff weeks selected yet.</p>
+            ) : (
+              <div className="kickoff-board">
+                {weeks.map(([week, customers]) => (
+                  <article key={week} className={customers.length > 1 ? 'clash' : ''}>
+                    <strong>{week}</strong>
+                    {customers.length > 1 && <span className="edi-flag">Two customers this week</span>}
+                    {customers.map((item) => <p key={item.id}>{item.company}<span>{personName(TEAM, item.ownerId) || item.agent}</span></p>)}
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
@@ -293,15 +289,18 @@ export default function EdiDashboard({ profile, onSignOut }) {
                 <h2>{open.company}</h2>
                 <button type="button" className="secondary status-edit" onClick={() => setOpenId('')}>Close</button>
               </div>
-              <p className="intro">{open.email} · Sales agent {open.agent}</p>
+              <p className="intro">{open.email} · Sales agent {open.agent} · Created {open.created}</p>
               <p>{personName(TEAM, open.ownerId) ? `${personName(TEAM, open.ownerId)} is working on this.` : 'Nobody on the EDI team has this yet.'}</p>
               {gaps(open).length > 0 && <div className="flag-row">{gaps(open).map((flag) => <span key={flag} className="edi-flag">{flag}</span>)}</div>}
               <h3>214 codes</h3>
-              {open.codes.length === 0 && <p className="intro">The customer has not selected statuses yet.</p>}
+              {open.codes.length === 0 && <p className="intro">No 214 statuses selected yet.</p>}
+              {open.needsAt7Mapping && (
+                <p className="intro">Custom AT7 values need EDI mapping before go-live.</p>
+              )}
               <ul className="code-review">
                 {open.codes.map((code) => (
-                  <li key={code.name}>
-                    <span>{code.name}</span>
+                  <li key={`${code.name}-${code.at701}-${code.at702}`}>
+                    <span>{code.name}{code.isCustom ? ' (custom)' : ''}</span>
                     <b className={code.custom.includes('at701') ? 'custom-code' : ''}>{code.at701}</b>
                     <b className={code.custom.includes('at702') ? 'custom-code' : ''}>{code.at702}</b>
                   </li>

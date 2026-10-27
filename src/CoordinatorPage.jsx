@@ -1,31 +1,59 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Shell } from './chrome.jsx'
+import { loadOnboardings, traderLabel, updateTraderIds } from './onboardingLink.js'
 
-const DUMMY = [
-  { id: 'amazon', company: 'Amazon', email: 'edi@amazon.com', agent: 'Maya Chen', submitted: 'Oct 26, 2026', qa: '', prod: '' },
-  { id: 'canadiantire', company: 'Canadian Tire', email: 'edi@canadiantire.ca', agent: 'Maya Chen', submitted: 'Oct 25, 2026', qa: 'CT-QA-1044', prod: '' },
-  { id: 'costco', company: 'Costco', email: 'edi@costco.ca', agent: 'Chris Patel', submitted: 'Oct 27, 2026', qa: '', prod: '' },
-]
+function formatSubmitted(value) {
+  if (!value) return '—'
+  return new Date(value).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
+}
 
 export default function CoordinatorPage({ profile, onSignOut }) {
-  const [items, setItems] = useState(DUMMY)
+  const [items, setItems] = useState([])
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
   const [openId, setOpenId] = useState('')
   const open = items.find((item) => item.id === openId)
   const [qa, setQa] = useState('')
   const [prod, setProd] = useState('')
   const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
+  const assigned = items.filter((item) => item.traderIdQa && item.traderIdProd).length
+
+  const refresh = async () => {
+    const records = await loadOnboardings()
+    setItems(records)
+    setError('')
+  }
+
+  useEffect(() => {
+    let cancel = false
+    loadOnboardings()
+      .then((records) => { if (!cancel) { setItems(records); setError('') } })
+      .catch((err) => { if (!cancel) setError(err.message) })
+    return () => { cancel = true }
+  }, [])
 
   const choose = (item) => {
     setOpenId(item.id)
-    setQa(item.qa)
-    setProd(item.prod)
+    setQa(item.traderIdQa || '')
+    setProd(item.traderIdProd || '')
+    setError('')
   }
-  const save = (event) => {
+
+  const save = async (event) => {
     event.preventDefault()
-    setItems((current) => current.map((item) => (item.id === openId ? { ...item, qa: qa.trim(), prod: prod.trim() } : item)))
-    setOpenId('')
+    if (!open) return
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await updateTraderIds(open.id, { traderIdQa: qa, traderIdProd: prod })
+      setItems((current) => current.map((item) => (item.id === saved.id ? saved : item)))
+      setOpenId('')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
   }
-  const assigned = items.filter((item) => item.qa && item.prod).length
 
   return (
     <Shell title="EDI Coordinator">
@@ -34,54 +62,60 @@ export default function CoordinatorPage({ profile, onSignOut }) {
         <div className="dash-top">
           <div>
             <h2 className="dash-title">Submitted onboardings</h2>
-            <p className="intro">Dummy data. Assign a QA trader id and a production trader id. This page is not connected to the database yet.</p>
+            <p className="intro">Assign a QA trader id and a production trader id. Sales can see these on the edit form.</p>
           </div>
-          {onSignOut && (
-            <div className="actions">
-              <button type="button" className="secondary" onClick={onSignOut}>Sign out</button>
-            </div>
-          )}
+          <div className="actions">
+            <button type="button" className="secondary" onClick={() => refresh().catch((err) => setError(err.message))} disabled={busy}>Refresh</button>
+            {onSignOut && <button type="button" className="secondary" onClick={onSignOut}>Sign out</button>}
+          </div>
         </div>
+        {error && <div className="banner err" role="alert">{error}</div>}
         <div className="edi-stats">
-          <div><b>{items.length}</b><span>Submitted</span></div>
+          <div><b>{items.length}</b><span>Onboardings</span></div>
           <div><b>{assigned}</b><span>Both trader ids set</span></div>
           <div><b>{items.length - assigned}</b><span>Still to assign</span></div>
         </div>
         <section className="card">
-          <table className="edi-table">
-            <thead>
-              <tr>
-                <th>Customer</th>
-                <th>Sales agent</th>
-                <th>Submitted</th>
-                <th>TraderID (QA)</th>
-                <th>TraderID (Prod)</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <td><strong>{item.company}</strong><div className="intro">{item.email}</div></td>
-                  <td>{item.agent}</td>
-                  <td>{item.submitted}</td>
-                  <td>{item.qa || '—'}</td>
-                  <td>{item.prod || '—'}</td>
-                  <td><button type="button" className="secondary status-edit" onClick={() => choose(item)}>Assign</button></td>
+          {items.length === 0 ? (
+            <p className="intro">No onboardings in the database yet.</p>
+          ) : (
+            <table className="edi-table">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Technow ID</th>
+                  <th>Sales agent</th>
+                  <th>Created</th>
+                  <th>TraderID (QA)</th>
+                  <th>TraderID (Prod)</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td><strong>{item.companyName}</strong><div className="intro">{item.customerEmail}</div></td>
+                    <td>{item.technowRequestId || item.id}</td>
+                    <td>{item.agentName || '—'}</td>
+                    <td>{formatSubmitted(item.createdAt)}</td>
+                    <td>{traderLabel(item.traderIdQa)}</td>
+                    <td>{traderLabel(item.traderIdProd)}</td>
+                    <td><button type="button" className="secondary status-edit" onClick={() => choose(item)}>Assign</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </section>
         {open && (
-          <div className="edi-detail" role="dialog" aria-label={`Assign trader ids for ${open.company}`}>
+          <div className="edi-detail" role="dialog" aria-label={`Assign trader ids for ${open.companyName}`}>
             <button type="button" className="edi-scrim" aria-label="Close" onClick={() => setOpenId('')} />
             <form className="edi-sheet" onSubmit={save}>
               <div className="dash-top">
-                <h2>{open.company}</h2>
+                <h2>{open.companyName}</h2>
                 <button type="button" className="secondary status-edit" onClick={() => setOpenId('')}>Close</button>
               </div>
-              <p className="intro">{open.email} · Sales agent {open.agent} · Submitted {open.submitted}</p>
+              <p className="intro">{open.customerEmail} · Technow {open.technowRequestId || open.id} · Sales agent {open.agentName || '—'} · Created {formatSubmitted(open.createdAt)}</p>
               <label className="field">
                 <span>TraderID (QA)</span>
                 <input value={qa} autoComplete="off" onChange={(event) => setQa(event.target.value)} />
@@ -91,7 +125,7 @@ export default function CoordinatorPage({ profile, onSignOut }) {
                 <input value={prod} autoComplete="off" onChange={(event) => setProd(event.target.value)} />
               </label>
               <div className="actions">
-                <button type="submit">Save</button>
+                <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
               </div>
             </form>
           </div>

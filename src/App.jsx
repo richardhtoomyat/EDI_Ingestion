@@ -4,196 +4,12 @@ import {
 } from './formConfig.js'
 import { Chevron, EDI_EMAIL, Shell } from './chrome.jsx'
 import { mergePrefill, saveSubmission } from './onboardingLink.js'
+import PhoneField from './PhoneField.jsx'
+import HostingRequest from './HostingRequest.jsx'
+import As2CertificateField from './As2CertificateField.jsx'
+import StatusPage, { statusCodeText } from './StatusPage.jsx'
 
 const ACCOUNT_SYSTEMS = ['TruckMate', 'AS400']
-
-const COUNTRY_CODES = [
-  { iso: 'ca', dial: '+1', name: 'Canada' },
-  { iso: 'us', dial: '+1', name: 'United States' },
-  { iso: 'mx', dial: '+52', name: 'Mexico' },
-  { iso: 'gb', dial: '+44', name: 'United Kingdom' },
-  { iso: 'fr', dial: '+33', name: 'France' },
-  { iso: 'de', dial: '+49', name: 'Germany' },
-  { iso: 'au', dial: '+61', name: 'Australia' },
-  { iso: 'in', dial: '+91', name: 'India' },
-  { iso: 'cn', dial: '+86', name: 'China' },
-  { iso: 'jp', dial: '+81', name: 'Japan' },
-  { iso: 'br', dial: '+55', name: 'Brazil' },
-]
-
-function Flag({ iso }) {
-  return <img className="flag" src={`https://flagcdn.com/w80/${iso}.png`} alt="" width="22" height="22" />
-}
-
-function formatPhone(digits) {
-  const d = digits.slice(0, 10)
-  if (d.length < 4) return d ? `(${d}` : ''
-  if (d.length < 7) return `(${d.slice(0, 3)}) ${d.slice(3)}`
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
-}
-
-function splitPhone(value) {
-  const match = String(value || '').match(/^(\+\d+)\s*(.*)$/)
-  const dial = COUNTRY_CODES.some((country) => country.dial === match?.[1]) ? match[1] : '+1'
-  const rest = match ? match[2] : value
-  return { dial, digits: String(rest || '').replace(/\D/g, '').slice(0, 10) }
-}
-
-function PhoneField({ id, label, required, value, onChange, error, verify }) {
-  const { dial, digits } = splitPhone(value)
-  const [iso, setIso] = useState(() => (dial === '+1' ? 'ca' : COUNTRY_CODES.find((country) => country.dial === dial)?.iso || 'ca'))
-  const [open, setOpen] = useState(false)
-  const [code, setCode] = useState('')
-  const [verified, setVerified] = useState(false)
-  const [stage, setStage] = useState('idle') // idle | checking | success
-  const [prompt, setPrompt] = useState(false)
-  const picker = useRef(null)
-  const country = COUNTRY_CODES.find((item) => item.iso === iso) || COUNTRY_CODES[0]
-  const complete = digits.length === 10
-  const reset = () => {
-    setVerified(false)
-    setCode('')
-    setStage('idle')
-  }
-  const write = (nextDial, nextDigits) => {
-    const formatted = formatPhone(nextDigits)
-    onChange(formatted ? `${nextDial} ${formatted}` : '')
-  }
-
-  useEffect(() => {
-    if (!open) return
-    const close = (event) => {
-      if (!picker.current?.contains(event.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
-
-  useEffect(() => {
-    if (!verify || !complete || verified) {
-      setPrompt(false)
-      return
-    }
-    const timer = setTimeout(() => setPrompt(true), 1000)
-    return () => clearTimeout(timer)
-  }, [verify, complete, verified, digits])
-
-  useEffect(() => {
-    if (verify && code.length === 4 && !verified && stage === 'idle') setStage('checking')
-  }, [code, verify, verified, stage])
-
-  useEffect(() => {
-    if (stage === 'checking') {
-      const timer = setTimeout(() => setStage('success'), 1000)
-      return () => clearTimeout(timer)
-    }
-    if (stage === 'success') {
-      const done = setTimeout(() => {
-        setVerified(true)
-        setCode('')
-      }, 900)
-      const idle = setTimeout(() => setStage('idle'), 1600)
-      return () => {
-        clearTimeout(done)
-        clearTimeout(idle)
-      }
-    }
-  }, [stage])
-
-  return (
-    <div className={`field${error ? ' has-error' : ''}`}>
-      <label htmlFor={id}>{label}{required && <b className="req"> *</b>}</label>
-      <div className="phone-row">
-        <div className="country-picker" ref={picker}>
-          <button type="button" className="country-btn" aria-label={`${label} country code`} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-            <Flag iso={country.iso} />
-            <span>{country.dial}</span>
-          </button>
-          {open && (
-            <ul className="country-menu" role="listbox">
-              {COUNTRY_CODES.map((item) => (
-                <li key={item.iso}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={item.iso === country.iso}
-                    onClick={() => {
-                      setIso(item.iso)
-                      setOpen(false)
-                      reset()
-                      write(item.dial, digits)
-                    }}
-                  >
-                    <Flag iso={item.iso} />
-                    <span>{item.name}</span>
-                    <b>{item.dial}</b>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <input
-          id={id}
-          type="tel"
-          inputMode="numeric"
-          autoComplete="off"
-          placeholder="(555) 555-5555"
-          value={formatPhone(digits)}
-          onChange={(e) => {
-            const next = e.target.value.replace(/\D/g, '').slice(0, 10)
-            if (next !== digits) reset()
-            write(country.dial, next)
-          }}
-        />
-        <span className={`verify-slot${verify && verified ? ' show' : ''}`} aria-hidden={!(verify && verified)}>
-          {verify && verified && (
-            <span className="verify-tick" aria-label="Verified">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="12" fill="#0095F6" />
-                <path d="M6.8 12.4l3.2 3.2 7.2-7.4" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" pathLength="1" />
-              </svg>
-            </span>
-          )}
-        </span>
-      </div>
-      {verify && (
-        <div className={`sms-box${prompt && !verified ? ' open' : ''}`}>
-          <div className="sms-box-inner">
-            <div className={`sms-panel stage-${stage}`}>
-              <label htmlFor={`${id}-code`}>Enter the 4-digit code sent to this number</label>
-              <div className="sms-row">
-                <input
-                  id={`${id}-code`}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={4}
-                  placeholder="••••"
-                  value={code}
-                  disabled={stage !== 'idle'}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                />
-                <span className="sms-status" aria-live="polite">
-                  {stage === 'checking' && (<><span className="spinner" /> Checking…</>)}
-                  {stage === 'success' && (
-                    <>
-                      <svg className="sms-ok" viewBox="0 0 24 24" aria-hidden="true">
-                        <circle cx="12" cy="12" r="12" fill="#0095F6" />
-                        <path d="M6.8 12.4l3.2 3.2 7.2-7.4" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" pathLength="1" />
-                      </svg>
-                      Verified
-                    </>
-                  )}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {error && <em role="alert">{error}</em>}
-    </div>
-  )
-}
 
 function Field({ field, value, onChange, error, id, prefix }) {
   if (field.type === 'tel') {
@@ -350,7 +166,13 @@ function validate(s, visible = { main: true, logistics: true, request: true }) {
   if (!/^[A-Z]{2,4}$/.test(s.x12.scac)) e.x12.scac = 'Use 2 to 4 letters'
   if (!/^[A-Z0-9]{1,15}$/.test(s.x12.isa)) e.x12.isa = 'Use 1 to 15 letters or digits'
   if (!/^[A-Z0-9]{2,15}$/.test(s.x12.gs)) e.x12.gs = 'Use 2 to 15 letters or digits'
-  if (!s.as2 && !s.sftp) e.other.comm = 'Select a communication method'
+  if (s.type !== 'Revised') {
+    if (s.hosting !== 'dayross' && s.hosting !== 'customer') {
+      e.other.comm = 'Select Day & Ross or Customer hosting'
+    } else if (s.hosting === 'customer' && !s.as2 && !s.sftp) {
+      e.other.comm = 'Select AS2 or SFTP'
+    }
+  }
   return e
 }
 
@@ -522,88 +344,6 @@ function KickoffPage({ weeks, onToggle, onBack, onContinue, error }) {
   )
 }
 
-function statusId(status, index) {
-  return `${status.code}:${index}:${status.name}`
-}
-
-function codesFor(status, index, edits) {
-  const id = statusId(status, index)
-  return edits?.[id] || { at701: status.at701, at702: status.at702 }
-}
-
-function statusCodeText(ids, list, edits) {
-  return ids.map((id) => {
-    const found = list.find((status, index) => statusId(status, index) === id)
-    if (!found) return null
-    const index = list.indexOf(found)
-    const codes = codesFor(found, index, edits)
-    const custom = codes.at701 !== found.at701 || codes.at702 !== found.at702
-    return `${found.name} (${codes.at701}/${codes.at702}${custom ? ', custom' : ''})`
-  }).filter(Boolean).join('\n')
-}
-
-function StatusCodeList({ title, list, selected, codeEdits, openIds, group, onToggle, onCustomize, onSave, onCode }) {
-  return (
-    <div>
-      <h3>{title}</h3>
-      <div className="status-code-head" aria-hidden="true">
-        <span>Description</span>
-        <span>AT7-01</span>
-        <span>AT7-02</span>
-        <span />
-      </div>
-      <ul className="status-codes">
-        {list.map((status, index) => {
-          const id = statusId(status, index)
-          const codes = codesFor(status, index, codeEdits)
-          const open = openIds.includes(id)
-          return (
-            <li key={id}>
-              <label>
-                <input type="checkbox" checked={selected.includes(id)} onChange={() => onToggle(group, id)} />
-                <span>{status.name}</span>
-              </label>
-              {['at701', 'at702'].map((field) => (
-                <input
-                  key={field}
-                  className={`code-box${codes[field] !== status[field] ? ' edited' : ''}`}
-                  aria-label={`${status.name} ${field === 'at701' ? 'AT7-01' : 'AT7-02'}`}
-                  value={codes[field]}
-                  disabled={!open}
-                  maxLength={4}
-                  onChange={(event) => onCode(group, id, field, event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4))}
-                />
-              ))}
-              <button type="button" className="secondary status-edit" onClick={() => (open ? onSave(group, id) : onCustomize(group, id, status))}>{open ? 'Save' : 'Customize'}</button>
-            </li>
-          )
-        })}
-      </ul>
-    </div>
-  )
-}
-
-function StatusPage({ normal, exception, normalCodes = {}, normalOpen = [], exceptionCodes = {}, exceptionOpen = [], onToggle, onCustomize, onSave, onCode, onBack, onContinue, error }) {
-  return (
-    <Shell>
-      <main className="page">
-        <section className="card">
-          <h2>214 Status <small>Select the statuses Day &amp; Ross should send</small></h2>
-          {error && <div className="banner err" role="alert">{error}</div>}
-          <div className="status-stack">
-            <StatusCodeList title="Normal Status" list={NORMAL_STATUSES} selected={normal} codeEdits={normalCodes} openIds={normalOpen} group="normalStatuses" onToggle={onToggle} onCustomize={onCustomize} onSave={onSave} onCode={onCode} />
-            <StatusCodeList title="Exception Status" list={EXCEPTION_STATUSES} selected={exception} codeEdits={exceptionCodes} openIds={exceptionOpen} group="exceptionStatuses" onToggle={onToggle} onCustomize={onCustomize} onSave={onSave} onCode={onCode} />
-          </div>
-        </section>
-        <div className="actions">
-          <button type="button" className="secondary" onClick={onBack}>Back</button>
-          <button type="button" onClick={onContinue}>Next <Chevron /></button>
-        </div>
-      </main>
-    </Shell>
-  )
-}
-
 function Summary({ state, onEdit }) {
   const sets = TRANSACTION_SETS.filter((t) => state.sets.includes(t.code)).map((t) => `${t.code} ${t.name}`).join(', ') || '—'
   const row = (k, v) => <tr key={k}><th>{k}</th><td>{v || '—'}</td></tr>
@@ -625,8 +365,10 @@ function Summary({ state, onEdit }) {
     state.normalStatuses.length ? `214 normal statuses: ${statusCodeText(state.normalStatuses, NORMAL_STATUSES, state.normalCodes).replaceAll('\n', ', ')}` : '',
     state.exceptionStatuses.length ? `214 exception statuses: ${statusCodeText(state.exceptionStatuses, EXCEPTION_STATUSES, state.exceptionCodes).replaceAll('\n', ', ')}` : '',
     `Developer Kickoff Call: ${[...state.kickoffWeeks].sort().map(formatWeek).join('; ')}`,
-    `Communication: ${[state.as2 && 'AS2', state.sftp && 'SFTP'].filter(Boolean).join(', ')}`,
-    state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
+    `Hosting: ${state.hosting === 'dayross' ? 'Day & Ross' : state.hosting === 'customer' ? 'Customer' : '—'}`,
+    state.hosting === 'customer' ? `Method: ${[state.as2 && 'AS2', state.sftp && 'SFTP'].filter(Boolean).join(', ') || '—'}` : '',
+    state.hosting === 'customer' && state.as2 ? `AS2 certificate: ${state.as2Certificate?.name || '—'}` : '',
+    state.hosting === 'customer' && state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
     `Completed by: ${state.authorization.name}, ${state.authorization.title}, ${state.authorization.company} on ${state.authorization.date}`,
     '(SFTP password intentionally omitted - share it securely.)',
   ].filter(Boolean).join('\n')
@@ -661,11 +403,14 @@ function Summary({ state, onEdit }) {
         {state.exceptionStatuses.length ? row('214 exception statuses', statusCodeText(state.exceptionStatuses, EXCEPTION_STATUSES, state.exceptionCodes)) : null}
         {row('Developer Kickoff Call', [...state.kickoffWeeks].sort().map(formatWeek).join('\n'))}
       </tbody></table></section>
-      <section className="card"><h2>Communication</h2><table><tbody>
-        {row('AS2', state.as2 ? 'Yes (billable setup charge applies)' : 'No')}
-        {row('SFTP', state.sftp ? 'Yes' : 'No')}
-        {state.sftp && SFTP_FIELDS.map((f) => row(f.label, f.name === 'password' ? '••••••••' : state.sftpDetails[f.name]))}
-      </tbody></table></section>
+      {state.type !== 'Revised' && (
+        <section className="card"><h2>EDI Communication</h2><table><tbody>
+          {row('Hosting', state.hosting === 'dayross' ? 'Day & Ross' : state.hosting === 'customer' ? 'Customer' : '—')}
+          {state.hosting === 'customer' && row('Method', [state.as2 && 'AS2', state.sftp && 'SFTP'].filter(Boolean).join(', ') || '—')}
+          {state.hosting === 'customer' && state.as2 && row('AS2 certificate', state.as2Certificate?.name || '—')}
+          {state.hosting === 'customer' && state.sftp && SFTP_FIELDS.map((f) => row(f.label, f.name === 'password' ? '••••••••' : state.sftpDetails[f.name]))}
+        </tbody></table></section>
+      )}
       <section className="card"><h2>Authorization</h2><table><tbody>
         {row('Completed by', state.authorization.name)}
         {row('Title', state.authorization.title)}
@@ -708,7 +453,7 @@ export default function App({ prefill, token }) {
     pollRef.current = null
   }
   useEffect(() => () => stopOutboundWatch(), [])
-  useEffect(() => { if (!state.sftp) stopOutboundWatch() }, [state.sftp])
+  useEffect(() => { if (state.hosting !== 'customer' || !state.sftp) stopOutboundWatch() }, [state.hosting, state.sftp])
 
   const postSftp = async (action) => {
     const res = await fetch('/api/test-sftp', {
@@ -863,9 +608,23 @@ export default function App({ prefill, token }) {
             [codeKey]: s[codeKey][id] ? s[codeKey] : { ...s[codeKey], [id]: { at701: status.at701, at702: status.at702 } },
           }))
         }}
-        onSave={(group, id) => {
+        onSave={(group, id, status) => {
           const openKey = group === 'normalStatuses' ? 'normalOpen' : 'exceptionOpen'
-          setState((s) => ({ ...s, [openKey]: s[openKey].filter((item) => item !== id) }))
+          const codeKey = group === 'normalStatuses' ? 'normalCodes' : 'exceptionCodes'
+          setState((s) => {
+            const existing = s[codeKey][id] || {}
+            return {
+              ...s,
+              [openKey]: s[openKey].filter((item) => item !== id),
+              [codeKey]: {
+                ...s[codeKey],
+                [id]: {
+                  at701: String(existing.at701 || '').trim() || status.at701,
+                  at702: String(existing.at702 || '').trim() || status.at702,
+                },
+              },
+            }
+          })
         }}
         onCode={(group, id, field, value) => {
           const codeKey = group === 'normalStatuses' ? 'normalCodes' : 'exceptionCodes'
@@ -985,22 +744,24 @@ export default function App({ prefill, token }) {
 
         <section className="card">
           <h2>Transaction Sets <small>ANSI X12, Version 4010 (check the appropriate boxes)</small></h2>
-          <div>
-            {TRANSACTION_SETS.map((t) => (
-              <label key={t.code} className="inline block">
-                <input type="checkbox" checked={state.sets.includes(t.code)} onChange={() => setState((s) => {
-                  const next = toggle(s.sets, t.code)
-                  const turningOn = !s.sets.includes(t.code)
-                  if (turningOn && (t.code === '204' || t.code === '211')) {
-                    const other = t.code === '204' ? '211' : '204'
-                    return { ...s, sets: next.filter((code) => code !== other) }
-                  }
-                  return { ...s, sets: next }
-                })} />
-                <span><b>{t.code}</b> {t.name}</span>
-              </label>
-            ))}
-          </div>
+          <fieldset disabled={fromAgent && prefill?.sets?.length > 0 && agentLocked} className={fromAgent && prefill?.sets?.length > 0 && agentLocked ? 'locked-fields' : undefined}>
+            <div>
+              {TRANSACTION_SETS.filter((t) => !(fromAgent && prefill?.sets?.length > 0 && agentLocked) || state.sets.includes(t.code)).map((t) => (
+                <label key={t.code} className="inline block">
+                  <input type="checkbox" checked={state.sets.includes(t.code)} onChange={() => setState((s) => {
+                    const next = toggle(s.sets, t.code)
+                    const turningOn = !s.sets.includes(t.code)
+                    if (turningOn && (t.code === '204' || t.code === '211')) {
+                      const other = t.code === '204' ? '211' : '204'
+                      return { ...s, sets: next.filter((code) => code !== other) }
+                    }
+                    return { ...s, sets: next }
+                  })} />
+                  <span><b>{t.code}</b> {t.name}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
         </section>
 
         <section className="card">
@@ -1030,46 +791,111 @@ export default function App({ prefill, token }) {
           </div>
         </section>
 
+        {state.type !== 'Revised' && (
         <section className={`card${err('other').comm ? ' group-error' : ''}`}>
-          <h2>Communication Methods <small>(check the appropriate boxes)</small></h2>
-          <label className="inline block"><input type="checkbox" checked={state.as2} onChange={(e) => setState((s) => ({ ...s, as2: e.target.checked }))} /> <span><b>AS2</b> <i>* There is a billable charge for setting up AS2</i></span></label>
-          <label className="inline block"><input type="checkbox" checked={state.sftp} onChange={(e) => setState((s) => ({ ...s, sftp: e.target.checked }))} /> <b>SFTP</b></label>
-          {err('other').comm && <em role="alert">{err('other').comm}</em>}
-          {state.sftp && (
-            <>
-              <div className="cols sub">
-                <Fields prefix="sftp" fields={SFTP_FIELDS} values={state.sftpDetails} onChange={setGroup('sftpDetails')} />
-              </div>
-              <div className="actions">
-                <button type="button" onClick={onSftpButton} disabled={!sftpReady || sftpBusy}>
-                  {sftpLabel} {!sftpBusy && <Chevron />}
-                </button>
-              </div>
-              {sftpTest.message && <div className={`banner ${sftpTest.ok ? 'ok' : 'err'}`} role="status">{sftpTest.message}</div>}
-            </>
-          )}
+          <h2>EDI Communication</h2>
+          <fieldset disabled={fromAgent && Boolean(prefill?.hosting) && agentLocked} className={fromAgent && Boolean(prefill?.hosting) && agentLocked ? 'locked-fields' : undefined}>
+            <legend>Hosting</legend>
+            {[
+              { value: 'dayross', label: 'Day & Ross' },
+              { value: 'customer', label: 'Customer' },
+            ].map((option) => (
+              <label key={option.value} className="inline">
+                <input
+                  type="radio"
+                  name="hosting"
+                  checked={state.hosting === option.value}
+                  onChange={() => setState((current) => ({
+                    ...current,
+                    hosting: option.value,
+                    as2: false,
+                    sftp: false,
+                    as2Certificate: null,
+                  }))}
+                /> {option.label}
+              </label>
+            ))}
+            {err('other').comm && <em role="alert">{err('other').comm}</em>}
+            {state.hosting === 'dayross' && <HostingRequest key="dayross-request" />}
+            {state.hosting === 'customer' && (
+              <>
+                <fieldset className="sub">
+                  <legend>Method</legend>
+                  <label className="inline">
+                    <input
+                      type="radio"
+                      name="customer-method"
+                      checked={Boolean(state.as2)}
+                      onChange={() => setState((current) => ({ ...current, as2: true, sftp: false }))}
+                    /> AS2
+                  </label>
+                  <label className="inline">
+                    <input
+                      type="radio"
+                      name="customer-method"
+                      checked={Boolean(state.sftp)}
+                      onChange={() => setState((current) => ({
+                        ...current,
+                        as2: false,
+                        sftp: true,
+                        as2Certificate: null,
+                      }))}
+                    /> SFTP
+                  </label>
+                </fieldset>
+                {state.as2 && (
+                  <div className="cols sub">
+                    <As2CertificateField
+                      value={state.as2Certificate}
+                      onChange={(as2Certificate) => setState((current) => ({ ...current, as2Certificate }))}
+                    />
+                  </div>
+                )}
+                {state.sftp && (
+                  <>
+                    <div className="cols sub">
+                      <Fields prefix="sftp" fields={SFTP_FIELDS} values={state.sftpDetails} onChange={setGroup('sftpDetails')} />
+                    </div>
+                    {!(fromAgent && Boolean(prefill?.hosting) && agentLocked) && (
+                      <>
+                        <div className="actions">
+                          <button type="button" onClick={onSftpButton} disabled={!sftpReady || sftpBusy}>
+                            {sftpLabel} {!sftpBusy && <Chevron />}
+                          </button>
+                        </div>
+                        {sftpTest.message && <div className={`banner ${sftpTest.ok ? 'ok' : 'err'}`} role="status">{sftpTest.message}</div>}
+                      </>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </fieldset>
         </section>
+        )}
 
         <section className="card">
           <h2>Authorization</h2>
-          <div className="cols">
-            <Fields prefix="auth" fields={[
-              { name: 'name', label: 'Name of person completing this form', required: true },
-              { name: 'title', label: 'Title' },
-              { name: 'company', label: 'Company' },
-            ]} values={state.authorization} onChange={setGroup('authorization')} errors={err('authorization')} />
-            <label className="field"><span>Date</span>
-              <input type="date" value={state.authorization.date} onChange={(e) => setGroup('authorization')('date', e.target.value)} />
+          <fieldset disabled={fromAgent && Boolean(prefill?.authorization?.name) && agentLocked} className={fromAgent && Boolean(prefill?.authorization?.name) && agentLocked ? 'locked-fields' : undefined}>
+            <div className="cols">
+              <Fields prefix="auth" fields={[
+                { name: 'name', label: 'Name of person completing this form', required: true },
+                { name: 'title', label: 'Title' },
+                { name: 'company', label: 'Company' },
+              ]} values={state.authorization} onChange={setGroup('authorization')} errors={err('authorization')} />
+              <label className="field"><span>Date</span>
+                <input type="date" value={state.authorization.date} onChange={(e) => setGroup('authorization')('date', e.target.value)} />
+              </label>
+            </div>
+            <fieldset><legend>Do you give authorization for your payment house to be set up on API/EDI and any other services Day &amp; Ross offers to get backup documents?</legend>
+              {['YES', 'NO'].map((v) => (
+                <label key={v} className="inline"><input type="radio" name="phauth" checked={state.authorization.paymentHouseAuth === v} onChange={() => setGroup('authorization')('paymentHouseAuth', v)} /> {v}</label>
+              ))}
+            </fieldset>
+            <label className="field"><span>Comments</span>
+              <textarea rows={3} value={state.authorization.comments} onChange={(e) => setGroup('authorization')('comments', e.target.value)} />
             </label>
-          </div>
-          <fieldset><legend>Do you give authorization for your payment house to be set up on API/EDI and any other services Day &amp; Ross offers to get backup documents?</legend>
-            {['YES', 'NO'].map((v) => (
-              <label key={v} className="inline"><input type="radio" name="phauth" checked={state.authorization.paymentHouseAuth === v} onChange={() => setGroup('authorization')('paymentHouseAuth', v)} /> {v}</label>
-            ))}
           </fieldset>
-          <label className="field"><span>Comments</span>
-            <textarea rows={3} value={state.authorization.comments} onChange={(e) => setGroup('authorization')('comments', e.target.value)} />
-          </label>
         </section>
 
         <div className="actions"><button type="submit">Next <Chevron /></button></div>

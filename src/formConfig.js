@@ -1,8 +1,11 @@
 import { sftpMock } from '../sftpMock.js'
 
 export const SERVICES = [
-  { value: 'ltl-tl', label: 'LTL/TL (Freight)' },
-  { value: 'commerce', label: 'Commerce Solutions (Sameday Worldwide)' },
+  { value: 'ltl', label: 'LTL' },
+  { value: 'truckload', label: 'Truckload' },
+  { value: 'home-delivery', label: 'Home Delivery' },
+  { value: 'dedicated-can', label: 'Dedicated CAN' },
+  { value: 'dedicated-usa', label: 'Dedicated USA' },
 ]
 
 export const PARTY_FIELDS = [
@@ -18,10 +21,10 @@ export const PARTY_FIELDS = [
 ]
 
 export const DEVELOPER_FIELDS = [
-  { name: 'developerName', label: 'Developer Name', required: true },
+  { name: 'developerName', label: 'Name', required: true },
   { name: 'title', label: 'Title' },
-  { name: 'tel', label: 'Mobile', type: 'tel' },
-  { name: 'otherTel', label: 'Other', type: 'tel' },
+  { name: 'tel', label: 'Contact - Mobile', type: 'tel' },
+  { name: 'otherTel', label: 'Contact - Other', type: 'tel' },
   { name: 'email', label: 'Email', type: 'email' },
 ]
 
@@ -91,8 +94,8 @@ export const SFTP_FIELDS = [
   { name: 'port', label: 'SFTP Port' },
   { name: 'username', label: 'Username' },
   { name: 'password', label: 'Password', type: 'password' },
-  { name: 'qualifier', label: 'Qualifier / Sender-Receiver ID' },
-  { name: 'directories', label: 'Directories' },
+  { name: 'qualifier', label: 'Inbound Directory (D&R Server)' },
+  { name: 'directories', label: 'Outbound Directory (Customer Server)' },
 ]
 
 const blank = (fields) => Object.fromEntries(fields.map((f) => [f.name, '']))
@@ -116,7 +119,9 @@ export const initialState = () => ({
   exceptionCodes: {},
   exceptionOpen: [],
   kickoffWeeks: [],
+  hosting: '',
   as2: false,
+  as2Certificate: null,
   sftp: false,
   sftpDetails: {
     ...blank(SFTP_FIELDS),

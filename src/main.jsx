@@ -2,18 +2,20 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
 import AuthGate from './AuthGate.jsx'
-import { InvalidLink } from './AgentApp.jsx'
+import { InvalidLink, SalesFormPreview } from './AgentApp.jsx'
 import { customerRoute, readCustomerDraft } from './onboardingLink.js'
 import './styles.css'
 
 function Root() {
   const route = customerRoute()
-  const [screen, setScreen] = useState(route.kind === 'agent' ? 'agent' : 'loading')
+  const [screen, setScreen] = useState(
+    route.kind === 'agent' || route.kind === 'salePreview' ? route.kind : 'loading',
+  )
   const [draft, setDraft] = useState(null)
   const [token, setToken] = useState('')
 
   useEffect(() => {
-    if (route.kind === 'agent') return
+    if (route.kind === 'agent' || route.kind === 'salePreview') return
     if (route.kind === 'invalid') {
       setScreen('invalid')
       return
@@ -41,6 +43,7 @@ function Root() {
     return () => { cancel = true }
   }, [route.kind, route.token])
 
+  if (screen === 'salePreview') return <SalesFormPreview />
   if (screen === 'agent') return <AuthGate />
   if (screen === 'invalid') return <InvalidLink />
   if (screen === 'loading') return <p className="page intro">Loading your onboarding…</p>
