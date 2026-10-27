@@ -609,38 +609,40 @@ export default function EdiDashboard({ profile, onSignOut }) {
         )}
 
         {tab === 'team' && !loading && (
-          <div className="workbuckets">
-            {team.length === 0 && (
-              <section className="card">
-                <p className="intro">No EDI accounts yet. Team members appear here after they create an account with the EDI role.</p>
-              </section>
-            )}
-            {team.map((person) => {
-              const bucket = items.filter((item) => item.ownerId === person.id)
-              return (
-                <section
-                  key={person.id}
-                  className={`card workbucket${dragOver === person.id ? ' over' : ''}`}
-                  onDragOver={(event) => { event.preventDefault(); setDragOver(person.id) }}
-                  onDragLeave={() => setDragOver('')}
-                  onDrop={onDropOwner(person.id)}
-                >
-                  <h3>{[person.firstName, person.lastName].filter(Boolean).join(' ') || person.email}</h3>
-                  <p className="intro">{person.email}</p>
-                  <p className="bucket-label">Workbucket</p>
-                  {bucket.length === 0 && <p className="intro">Drag an onboarding here.</p>}
-                  {bucket.map((item) => (
-                    <button key={item.id} type="button" className="bucket-card" draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', item.id)} onClick={() => setOpenId(item.id)}>
-                      <strong>{item.company}</strong>
-                      <span>{statusLabel(item.status, item, team)}</span>
-                      {item.needsAt7Mapping && <span className="edi-flag">Custom mapping</span>}
-                    </button>
-                  ))}
+          <div className="workbuckets-layout">
+            <div className="workbuckets">
+              {team.length === 0 && (
+                <section className="card">
+                  <p className="intro">No EDI accounts yet. Team members appear here after they create an account with the EDI role.</p>
                 </section>
-              )
-            })}
+              )}
+              {team.map((person) => {
+                const bucket = items.filter((item) => item.ownerId === person.id)
+                return (
+                  <section
+                    key={person.id}
+                    className={`card workbucket${dragOver === person.id ? ' over' : ''}`}
+                    onDragOver={(event) => { event.preventDefault(); setDragOver(person.id) }}
+                    onDragLeave={() => setDragOver('')}
+                    onDrop={onDropOwner(person.id)}
+                  >
+                    <h3>{[person.firstName, person.lastName].filter(Boolean).join(' ') || person.email}</h3>
+                    <p className="intro">{person.email}</p>
+                    <p className="bucket-label">Workbucket</p>
+                    {bucket.length === 0 && <p className="intro">Drag an onboarding here.</p>}
+                    {bucket.map((item) => (
+                      <button key={item.id} type="button" className="bucket-card" draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', item.id)} onClick={() => setOpenId(item.id)}>
+                        <strong>{item.company}</strong>
+                        <span>{statusLabel(item.status, item, team)}</span>
+                        {item.needsAt7Mapping && <span className="edi-flag">Custom mapping</span>}
+                      </button>
+                    ))}
+                  </section>
+                )
+              })}
+            </div>
             <section
-              className={`card workbucket${dragOver === 'none' ? ' over' : ''}`}
+              className={`card workbucket workbucket-unassigned${dragOver === 'none' ? ' over' : ''}`}
               onDragOver={(event) => { event.preventDefault(); setDragOver('none') }}
               onDragLeave={() => setDragOver('')}
               onDrop={onDropOwner('')}

@@ -532,8 +532,26 @@ button.edi-tab.active, button.edi-tab.active:hover { background: var(--black); c
 .stage-prompt-sheet { width: min(420px, 100%); height: auto; max-height: calc(100% - 48px); margin: auto; align-self: center; border-radius: 4px; }
 .stage-prompt { justify-content: center; align-items: center; }
 .edi-flag { display: inline-block; margin: 2px 6px 2px 0; padding: 2px 8px; font-size: .75rem; background: #fff4ee; color: #c2410c; }
-.workbuckets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.workbuckets-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 12px;
+  align-items: start;
+}
+.workbuckets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
 .workbucket.over { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255,95,20,.18); }
+.workbucket-unassigned {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
+  align-self: start;
+}
 .bucket-label { margin: 10px 0 6px; font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--grey); }
 button.bucket-card, button.bucket-card:hover, button.bucket-card:active {
   width: 100%; margin: 0 0 8px; padding: 10px 12px; text-align: left; background: #fff; color: var(--black);
@@ -585,7 +603,11 @@ button.edi-scrim, button.edi-scrim:hover { position: absolute; inset: 0; backgro
 .code-review li { display: grid; grid-template-columns: 1fr 4rem 4rem; gap: 8px; align-items: center; margin: 8px 0; }
 .custom-code { color: #c2410c; background: #fff4ee; border: 1px solid var(--orange); text-align: center; padding: 4px 0; }
 .flag-row { margin: 8px 0 14px; }
-@media (max-width: 900px) { .workbuckets, .kickoff-board { grid-template-columns: 1fr; } }
+@media (max-width: 900px) {
+  .workbuckets-layout { grid-template-columns: 1fr; }
+  .workbucket-unassigned { position: static; max-height: none; order: -1; }
+  .workbuckets, .kickoff-board { grid-template-columns: 1fr; }
+}
 @media (max-width: 800px) {
   .edi-stats, .edi-filters { grid-template-columns: 1fr; }
 }
