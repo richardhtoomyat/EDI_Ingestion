@@ -1,38 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  SERVICES, PARTY_FIELDS, DEVELOPER_FIELDS, TRANSACTION_SETS, SFTP_FIELDS, NORMAL_STATUSES, EXCEPTION_STATUSES, initialState,
+  SERVICES, PARTY_FIELDS, DEVELOPER_FIELDS, TRANSACTION_SETS, SFTP_FIELDS, NORMAL_STATUSES, EXCEPTION_STATUSES,
 } from './formConfig.js'
-import logo from './assets/logo.png'
+import { Chevron, EDI_EMAIL, Shell } from './chrome.jsx'
+import { mergePrefill, saveSubmission } from './onboardingLink.js'
 
 const ACCOUNT_SYSTEMS = ['TruckMate', 'AS400']
-
-const EDI_EMAIL = 'edirequest@dayandrossinc.ca'
-
-function SiteHeader() {
-  return (
-    <header className="site-header no-print">
-      <div className="site-header-inner">
-        <img className="logo" src={logo} alt="Day &amp; Ross" />
-        <span className="site-title">EDI Customer Onboarding</span>
-      </div>
-    </header>
-  )
-}
-
-function SiteFooter() {
-  return (
-    <footer className="site-footer no-print">
-      <p>Questions? Contact <a href={`mailto:${EDI_EMAIL}`}>{EDI_EMAIL}</a></p>
-      <p>© Day &amp; Ross. All rights reserved.</p>
-    </footer>
-  )
-}
-
-function Shell({ children }) {
-  return (<><SiteHeader />{children}<SiteFooter /></>)
-}
-
-const Chevron = () => <span className="chev" aria-hidden="true">›</span>
 
 const COUNTRY_CODES = [
   { iso: 'ca', dial: '+1', name: 'Canada' },
@@ -316,8 +289,16 @@ function AccountNumberField({ id, value, system, onValue, error }) {
   )
 }
 
-function PartyColumn({ title, prefix, values, onChange, errors }) {
-  const rest = PARTY_FIELDS.filter((f) => f.name !== 'accountNumber')
+function partyHasValues(values = {}) {
+  return Boolean(
+    String(values.accountNumber || '').trim()
+    || String(values.accountSystem || '').trim()
+    || PARTY_FIELDS.some((field) => String(values[field.name] || '').trim())
+  )
+}
+
+function PartyColumn({ title, prefix, values, onChange, errors, locked = false }) {
+  const rest = PARTY_FIELDS.filter((f) => f.name !== 'accountNumber' && (!locked || String(values[f.name] || '').trim()))
   const chooseSystem = (system) => {
     onChange('accountSystem', system)
     onChange('accountNumber', system === 'AS400' ? padAs400(values.accountNumber) : values.accountNumber.replace(/^0+/, ''))
@@ -325,31 +306,35 @@ function PartyColumn({ title, prefix, values, onChange, errors }) {
   return (
     <div>
       <h3>{title}</h3>
-      <AccountNumberField id={`${prefix}-accountNumber`} value={values.accountNumber} system={values.accountSystem} onValue={(v) => onChange('accountNumber', v)} error={errors.accountNumber} />
+      <fieldset disabled={locked} className={locked ? 'locked-fields' : undefined}>
+      {(!locked || values.accountNumber) && <AccountNumberField id={`${prefix}-accountNumber`} value={values.accountNumber} system={values.accountSystem} onValue={(v) => onChange('accountNumber', v)} error={errors.accountNumber} />}
+      {(!locked || values.accountSystem) && (
       <fieldset className={errors.accountSystem ? 'group-error' : ''}>
-        <legend>Is this account # TruckMate or AS400? <b className="req">*</b></legend>
-        {ACCOUNT_SYSTEMS.map((system) => (
+        <legend>Is this account # TruckMate or AS400?{!locked && <> <b className="req">*</b></>}</legend>
+        {ACCOUNT_SYSTEMS.filter((system) => !locked || values.accountSystem === system).map((system) => (
           <label key={system} className="inline">
             <input type="radio" name={`${prefix}-accountSystem`} checked={values.accountSystem === system} onChange={() => chooseSystem(system)} /> {system}
           </label>
         ))}
         {errors.accountSystem && <em role="alert">{errors.accountSystem}</em>}
       </fieldset>
+      )}
       <Fields prefix={prefix} fields={rest} values={values} onChange={onChange} errors={errors} />
+      </fieldset>
     </div>
   )
 }
 
-function validate(s) {
+function validate(s, visible = { main: true, logistics: true, request: true }) {
   const e = { mainAccount: {}, logisticsProvider: {}, developer: {}, authorization: {}, x12: {}, other: {} }
   const need = (group, key, v) => { if (!String(v).trim()) e[group][key] = 'Required' }
+  const groups = [visible.main && 'mainAccount', visible.logistics && 'logisticsProvider'].filter(Boolean)
   for (const f of PARTY_FIELDS.filter((f) => f.required)) {
-    need('mainAccount', f.name, s.mainAccount[f.name])
-    need('logisticsProvider', f.name, s.logisticsProvider[f.name])
+    for (const group of groups) need(group, f.name, s[group][f.name])
   }
-  need('mainAccount', 'accountSystem', s.mainAccount.accountSystem)
-  need('logisticsProvider', 'accountSystem', s.logisticsProvider.accountSystem)
-  for (const group of ['mainAccount', 'logisticsProvider']) {
+  if (visible.main) need('mainAccount', 'accountSystem', s.mainAccount.accountSystem)
+  if (visible.logistics) need('logisticsProvider', 'accountSystem', s.logisticsProvider.accountSystem)
+  for (const group of groups) {
     if (s[group].accountSystem === 'AS400' && s[group].accountNumber && s[group].accountNumber.length !== 7) {
       e[group].accountNumber = 'AS400 account # must be 7 characters'
     }
@@ -357,10 +342,11 @@ function validate(s) {
   need('developer', 'developerName', s.developer.developerName)
   need('authorization', 'name', s.authorization.name)
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  for (const [g, vals] of [['mainAccount', s.mainAccount], ['logisticsProvider', s.logisticsProvider], ['developer', s.developer]]) {
+  for (const [g, vals] of [[visible.main && 'mainAccount', s.mainAccount], [visible.logistics && 'logisticsProvider', s.logisticsProvider], ['developer', s.developer]]) {
+    if (!g) continue
     if (vals.email && !emailRe.test(vals.email) && vals.email.toUpperCase() !== 'N/A') e[g].email = 'Enter a valid email'
   }
-  if (s.services.length === 0) e.other.services = 'Select at least one service'
+  if (visible.request && s.services.length === 0) e.other.services = 'Select at least one service'
   if (!/^[A-Z]{2,4}$/.test(s.x12.scac)) e.x12.scac = 'Use 2 to 4 letters'
   if (!/^[A-Z0-9]{1,15}$/.test(s.x12.isa)) e.x12.isa = 'Use 1 to 15 letters or digits'
   if (!/^[A-Z0-9]{2,15}$/.test(s.x12.gs)) e.x12.gs = 'Use 2 to 15 letters or digits'
@@ -369,7 +355,7 @@ function validate(s) {
 }
 
 const hasErrors = (e) => Object.values(e).some((g) => Object.keys(g).length)
-const wants214 = (s) => s.sets.dayRoss.includes('214') || s.sets.customer.includes('214')
+const wants214 = (s) => s.sets.includes('214')
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -387,6 +373,13 @@ function addDays(date, count) {
 function mondayOf(date) {
   const day = date.getDay()
   return addDays(date, day === 0 ? -6 : 1 - day)
+}
+
+function firstSelectableMonday(today) {
+  const day = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const earliest = addDays(day, 14)
+  const monday = mondayOf(earliest)
+  return monday < earliest ? addDays(monday, 7) : monday
 }
 
 function monthCells(year, month) {
@@ -410,10 +403,11 @@ function formatWeek(mondayIso) {
 function WeekPicker({ selected, onToggle }) {
   const today = new Date()
   const todayIso = isoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate()))
-  const thisMonday = isoDate(mondayOf(today))
-  const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
+  const earliestMonday = isoDate(firstSelectableMonday(today))
+  const opening = firstSelectableMonday(today)
+  const [cursor, setCursor] = useState(() => new Date(opening.getFullYear(), opening.getMonth(), 1))
   const [hover, setHover] = useState(null)
-  const firstMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+  const firstMonth = new Date(opening.getFullYear(), opening.getMonth(), 1)
   const lastMonth = new Date(today.getFullYear(), today.getMonth() + 8, 1)
   const right = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
   const canPrev = cursor > firstMonth
@@ -424,7 +418,7 @@ function WeekPicker({ selected, onToggle }) {
 
   const paint = (date) => {
     const monday = isoDate(mondayOf(date))
-    const past = monday < thisMonday
+    const past = monday < earliestMonday
     const picked = selected.includes(monday)
     const showing = picked || hover === monday
     const day = date.getDay()
@@ -514,7 +508,7 @@ function KickoffPage({ weeks, onToggle, onBack, onContinue, error }) {
       <main className="page">
         <section className="card">
           <h2>Developer Kickoff Call <small>Pick 3 weeks you are available</small></h2>
-          <p className="intro">Each choice is one full week, Monday through Sunday. Click any day to select that week, and click it again to remove it.</p>
+          <p className="intro">Each choice is one full week, Monday through Sunday. The first week you can choose starts two weeks from today. Click any day to select that week, and click it again to remove it.</p>
           {error && <div className="banner err" role="alert">{error}</div>}
           <WeekPicker selected={weeks} onToggle={onToggle} />
           <p className="week-count">{weeks.length} of 3 weeks selected</p>
@@ -532,38 +526,73 @@ function statusId(status, index) {
   return `${status.code}:${index}:${status.name}`
 }
 
-function statusNames(ids, list) {
-  return ids.map((id) => list.find((status, index) => statusId(status, index) === id)?.name).filter(Boolean).join('\n')
+function codesFor(status, index, edits) {
+  const id = statusId(status, index)
+  return edits?.[id] || { at701: status.at701, at702: status.at702 }
 }
 
-function StatusPage({ normal, exception, onToggle, onBack, onContinue, error }) {
-  const column = (title, list, selected, group) => (
+function statusCodeText(ids, list, edits) {
+  return ids.map((id) => {
+    const found = list.find((status, index) => statusId(status, index) === id)
+    if (!found) return null
+    const index = list.indexOf(found)
+    const codes = codesFor(found, index, edits)
+    const custom = codes.at701 !== found.at701 || codes.at702 !== found.at702
+    return `${found.name} (${codes.at701}/${codes.at702}${custom ? ', custom' : ''})`
+  }).filter(Boolean).join('\n')
+}
+
+function StatusCodeList({ title, list, selected, codeEdits, openIds, group, onToggle, onCustomize, onSave, onCode }) {
+  return (
     <div>
       <h3>{title}</h3>
-      <ul className="status-list">
+      <div className="status-code-head" aria-hidden="true">
+        <span>Description</span>
+        <span>AT7-01</span>
+        <span>AT7-02</span>
+        <span />
+      </div>
+      <ul className="status-codes">
         {list.map((status, index) => {
           const id = statusId(status, index)
+          const codes = codesFor(status, index, codeEdits)
+          const open = openIds.includes(id)
           return (
             <li key={id}>
               <label>
                 <input type="checkbox" checked={selected.includes(id)} onChange={() => onToggle(group, id)} />
                 <span>{status.name}</span>
               </label>
+              {['at701', 'at702'].map((field) => (
+                <input
+                  key={field}
+                  className={`code-box${codes[field] !== status[field] ? ' edited' : ''}`}
+                  aria-label={`${status.name} ${field === 'at701' ? 'AT7-01' : 'AT7-02'}`}
+                  value={codes[field]}
+                  disabled={!open}
+                  maxLength={4}
+                  onChange={(event) => onCode(group, id, field, event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4))}
+                />
+              ))}
+              <button type="button" className="secondary status-edit" onClick={() => (open ? onSave(group, id) : onCustomize(group, id, status))}>{open ? 'Save' : 'Customize'}</button>
             </li>
           )
         })}
       </ul>
     </div>
   )
+}
+
+function StatusPage({ normal, exception, normalCodes = {}, normalOpen = [], exceptionCodes = {}, exceptionOpen = [], onToggle, onCustomize, onSave, onCode, onBack, onContinue, error }) {
   return (
     <Shell>
       <main className="page">
         <section className="card">
           <h2>214 Status <small>Select the statuses Day &amp; Ross should send</small></h2>
           {error && <div className="banner err" role="alert">{error}</div>}
-          <div className="cols">
-            {column('Normal Status', NORMAL_STATUSES, normal, 'normalStatuses')}
-            {column('Exception Status', EXCEPTION_STATUSES, exception, 'exceptionStatuses')}
+          <div className="status-stack">
+            <StatusCodeList title="Normal Status" list={NORMAL_STATUSES} selected={normal} codeEdits={normalCodes} openIds={normalOpen} group="normalStatuses" onToggle={onToggle} onCustomize={onCustomize} onSave={onSave} onCode={onCode} />
+            <StatusCodeList title="Exception Status" list={EXCEPTION_STATUSES} selected={exception} codeEdits={exceptionCodes} openIds={exceptionOpen} group="exceptionStatuses" onToggle={onToggle} onCustomize={onCustomize} onSave={onSave} onCode={onCode} />
           </div>
         </section>
         <div className="actions">
@@ -576,7 +605,7 @@ function StatusPage({ normal, exception, onToggle, onBack, onContinue, error }) 
 }
 
 function Summary({ state, onEdit }) {
-  const sets = (key) => TRANSACTION_SETS.filter((t) => state.sets[key].includes(t.code)).map((t) => t.code).join(', ') || '—'
+  const sets = TRANSACTION_SETS.filter((t) => state.sets.includes(t.code)).map((t) => `${t.code} ${t.name}`).join(', ') || '—'
   const row = (k, v) => <tr key={k}><th>{k}</th><td>{v || '—'}</td></tr>
   const party = (p) => PARTY_FIELDS.flatMap((f) => (
     f.name === 'accountNumber'
@@ -589,13 +618,12 @@ function Summary({ state, onEdit }) {
     `Services: ${state.services.map((v) => SERVICES.find((x) => x.value === v).label).join('; ')}`,
     `Main account: ${state.mainAccount.companyName} (#${state.mainAccount.accountNumber}, ${state.mainAccount.accountSystem})`,
     `Logistics provider: ${state.logisticsProvider.companyName} (#${state.logisticsProvider.accountNumber}, ${state.logisticsProvider.accountSystem})`,
-    `D&R provides specs: ${sets('dayRoss')}`,
-    `Customer provides specs: ${sets('customer')}`,
+    `Transaction sets: ${sets}`,
     `SCAC: ${state.x12.scac}`,
     `ISA: ${state.x12.isa}`,
     `GS: ${state.x12.gs}`,
-    state.normalStatuses.length ? `214 normal statuses: ${statusNames(state.normalStatuses, NORMAL_STATUSES).replaceAll('\n', ', ')}` : '',
-    state.exceptionStatuses.length ? `214 exception statuses: ${statusNames(state.exceptionStatuses, EXCEPTION_STATUSES).replaceAll('\n', ', ')}` : '',
+    state.normalStatuses.length ? `214 normal statuses: ${statusCodeText(state.normalStatuses, NORMAL_STATUSES, state.normalCodes).replaceAll('\n', ', ')}` : '',
+    state.exceptionStatuses.length ? `214 exception statuses: ${statusCodeText(state.exceptionStatuses, EXCEPTION_STATUSES, state.exceptionCodes).replaceAll('\n', ', ')}` : '',
     `Developer Kickoff Call: ${[...state.kickoffWeeks].sort().map(formatWeek).join('; ')}`,
     `Communication: ${[state.as2 && 'AS2', state.sftp && 'SFTP'].filter(Boolean).join(', ')}`,
     state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
@@ -625,13 +653,12 @@ function Summary({ state, onEdit }) {
       </tbody></table></section>
       <section className="card"><h2>EDI Technical Contact</h2><table><tbody>{DEVELOPER_FIELDS.map((f) => row(f.label, state.developer[f.name]))}</tbody></table></section>
       <section className="card"><h2>Transaction Sets (ANSI X12, 4010)</h2><table><tbody>
-        {row('Day & Ross provides specs', sets('dayRoss'))}
-        {row('Customer provides specs', sets('customer'))}
+        {row('Transaction sets', sets)}
         {row('SCAC', state.x12.scac)}
         {row('ISA', state.x12.isa)}
         {row('GS', state.x12.gs)}
-        {state.normalStatuses.length ? row('214 normal statuses', statusNames(state.normalStatuses, NORMAL_STATUSES)) : null}
-        {state.exceptionStatuses.length ? row('214 exception statuses', statusNames(state.exceptionStatuses, EXCEPTION_STATUSES)) : null}
+        {state.normalStatuses.length ? row('214 normal statuses', statusCodeText(state.normalStatuses, NORMAL_STATUSES, state.normalCodes)) : null}
+        {state.exceptionStatuses.length ? row('214 exception statuses', statusCodeText(state.exceptionStatuses, EXCEPTION_STATUSES, state.exceptionCodes)) : null}
         {row('Developer Kickoff Call', [...state.kickoffWeeks].sort().map(formatWeek).join('\n'))}
       </tbody></table></section>
       <section className="card"><h2>Communication</h2><table><tbody>
@@ -652,12 +679,17 @@ function Summary({ state, onEdit }) {
   )
 }
 
-export default function App() {
-  const [state, setState] = useState(initialState)
+export default function App({ prefill, token }) {
+  const [state, setState] = useState(() => mergePrefill(prefill))
   const [errors, setErrors] = useState(null)
   const [page, setPage] = useState('form')
   const [statusError, setStatusError] = useState('')
   const [kickoffError, setKickoffError] = useState('')
+  const [editingAgent, setEditingAgent] = useState(false)
+  useEffect(() => {
+    if (page !== 'review' || !token) return
+    saveSubmission(token, state)
+  }, [page])
   const [sftpTest, setSftpTest] = useState({ phase: 'idle', ok: false, message: '' })
   const sftpTarget = useRef({ server: '', port: '' })
   const pollRef = useRef(null)
@@ -756,11 +788,39 @@ export default function App() {
     done: 'Done',
   }[sftpTest.phase]
 
+  const fromAgent = Boolean(prefill)
+  const agentLocked = fromAgent && !editingAgent
+  const showRequest = !fromAgent || prefill.services?.length > 0 || prefill.type === 'Revised'
+  const showMain = !fromAgent || partyHasValues(prefill.mainAccount) || Boolean(String(prefill.customerEmail || '').trim())
+  const showLogistics = !fromAgent || partyHasValues(prefill.logisticsProvider)
+  const showLocations = !fromAgent || Boolean(String(prefill.additionalLocations || '').trim())
+  const showPayment = !fromAgent || Boolean(String(prefill.paymentHouse?.companyName || '').trim() || String(prefill.paymentHouse?.contactName || '').trim())
+
+  const saveAgent = () => {
+    const e = validate(state, { main: showMain, logistics: showLogistics, request: showRequest })
+    const agentErrors = {
+      mainAccount: showMain ? e.mainAccount : {},
+      logisticsProvider: showLogistics ? e.logisticsProvider : {},
+      developer: {},
+      authorization: {},
+      x12: {},
+      other: showRequest && e.other.services ? { services: e.other.services } : {},
+    }
+    if (hasErrors(agentErrors)) {
+      setErrors(agentErrors)
+      setTimeout(() => document.querySelector('.has-error, .group-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
+      return
+    }
+    setErrors(null)
+    setEditingAgent(false)
+  }
+
   const submit = (ev) => {
     ev.preventDefault()
-    const e = validate(state)
+    const e = validate(state, { main: showMain, logistics: showLogistics, request: showRequest })
     setErrors(e)
     if (hasErrors(e)) {
+      if (fromAgent) setEditingAgent(true)
       setTimeout(() => document.querySelector('.has-error, .group-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
       return
     }
@@ -785,10 +845,34 @@ export default function App() {
       <StatusPage
         normal={state.normalStatuses}
         exception={state.exceptionStatuses}
+        normalCodes={state.normalCodes}
+        normalOpen={state.normalOpen}
+        exceptionCodes={state.exceptionCodes}
+        exceptionOpen={state.exceptionOpen}
         error={statusError}
         onToggle={(group, id) => {
           setStatusError('')
           setState((s) => ({ ...s, [group]: toggle(s[group], id) }))
+        }}
+        onCustomize={(group, id, status) => {
+          const openKey = group === 'normalStatuses' ? 'normalOpen' : 'exceptionOpen'
+          const codeKey = group === 'normalStatuses' ? 'normalCodes' : 'exceptionCodes'
+          setState((s) => ({
+            ...s,
+            [openKey]: s[openKey].includes(id) ? s[openKey] : [...s[openKey], id],
+            [codeKey]: s[codeKey][id] ? s[codeKey] : { ...s[codeKey], [id]: { at701: status.at701, at702: status.at702 } },
+          }))
+        }}
+        onSave={(group, id) => {
+          const openKey = group === 'normalStatuses' ? 'normalOpen' : 'exceptionOpen'
+          setState((s) => ({ ...s, [openKey]: s[openKey].filter((item) => item !== id) }))
+        }}
+        onCode={(group, id, field, value) => {
+          const codeKey = group === 'normalStatuses' ? 'normalCodes' : 'exceptionCodes'
+          setState((s) => ({
+            ...s,
+            [codeKey]: { ...s[codeKey], [id]: { ...s[codeKey][id], [field]: value } },
+          }))
         }}
         onBack={() => { setPage('form'); window.scrollTo(0, 0) }}
         onContinue={() => {
@@ -837,59 +921,84 @@ export default function App() {
     </section>
     <main className="page">
       <p className="intro">Please complete all required fields marked with an asterisk (<b className="req">*</b>) before you submit the form. Thank you.</p>
+      {prefill && <div className="banner ok">Your Day &amp; Ross sales agent started this form. Review the details and complete the rest.</div>}
 
       <form onSubmit={submit} noValidate>
         {errors && hasErrors(errors) && <div className="banner err" role="alert">Please fix the highlighted fields below.</div>}
 
+        {(showRequest || showMain || showLogistics || showLocations || showPayment) && (
         <section className="card">
-          <h2>Request</h2>
+          <div className="dash-top">
+            <h2>{fromAgent ? 'Provided by your sales agent' : 'Account information'}</h2>
+            {fromAgent && <button type="button" className="secondary" onClick={() => (editingAgent ? saveAgent() : setEditingAgent(true))}>{editingAgent ? 'Save' : 'Edit'}</button>}
+          </div>
+          {showRequest && (
           <div className="row">
-            <fieldset><legend>Type</legend>
-              {['New', 'Revised'].map((t) => (
+            <fieldset disabled={agentLocked} className={agentLocked ? 'locked-fields' : undefined}><legend>Type</legend>
+              {(agentLocked ? [state.type] : ['New', 'Revised']).map((t) => (
                 <label key={t} className="inline"><input type="radio" name="type" checked={state.type === t} onChange={() => setState((s) => ({ ...s, type: t }))} /> {t}</label>
               ))}
             </fieldset>
-            <fieldset className={err('other').services ? 'group-error' : ''}><legend>Service</legend>
-              {SERVICES.map((sv) => (
+            <fieldset disabled={agentLocked} className={`${agentLocked ? 'locked-fields' : ''}${err('other').services ? ' group-error' : ''}`}><legend>Service</legend>
+              {SERVICES.filter((sv) => !agentLocked || state.services.includes(sv.value)).map((sv) => (
                 <label key={sv.value} className="inline"><input type="checkbox" checked={state.services.includes(sv.value)} onChange={() => setState((s) => ({ ...s, services: toggle(s.services, sv.value) }))} /> {sv.label}</label>
               ))}
               {err('other').services && <em role="alert">{err('other').services}</em>}
             </fieldset>
           </div>
-        </section>
-
-        <section className="card">
-          <h2>Main Account, Locations, Logistics &amp; Contact Information</h2>
+          )}
+          {(showMain || showLogistics) && (
           <div className="cols">
-            <PartyColumn title="Main Account" prefix="main" values={state.mainAccount} onChange={setGroup('mainAccount')} errors={err('mainAccount')} />
-            <PartyColumn title="Logistics Provider" prefix="lp" values={state.logisticsProvider} onChange={setGroup('logisticsProvider')} errors={err('logisticsProvider')} />
+            {showMain && <PartyColumn title="Main Account" prefix="main" values={state.mainAccount} onChange={setGroup('mainAccount')} errors={err('mainAccount')} locked={agentLocked} />}
+            {showLogistics && <PartyColumn title="Logistics Provider" prefix="lp" values={state.logisticsProvider} onChange={setGroup('logisticsProvider')} errors={err('logisticsProvider')} locked={agentLocked} />}
           </div>
+          )}
+          {(showLocations || showPayment) && (
           <div className="cols">
+            {showLocations && (
             <div>
               <h3>Additional Locations</h3>
+              <fieldset disabled={agentLocked} className={agentLocked ? 'locked-fields' : undefined}>
               <label className="field"><span>Indicate Account # or Name &amp; Address</span>
                 <textarea rows={4} value={state.additionalLocations} onChange={(e) => setState((s) => ({ ...s, additionalLocations: e.target.value }))} />
               </label>
-              <h3>Payment House</h3>
-              <Fields prefix="ph" fields={[{ name: 'companyName', label: 'Company Name' }, { name: 'contactName', label: 'Contact Name' }]} values={state.paymentHouse} onChange={setGroup('paymentHouse')} />
+              </fieldset>
             </div>
-            <div><h3>EDI Technical Contact</h3><Fields prefix="dev" fields={DEVELOPER_FIELDS} values={state.developer} onChange={setGroup('developer')} errors={err('developer')} /></div>
+            )}
+            {showPayment && (
+            <div>
+              <h3>Payment House</h3>
+              <fieldset disabled={agentLocked} className={agentLocked ? 'locked-fields' : undefined}>
+              <Fields prefix="ph" fields={[{ name: 'companyName', label: 'Company Name' }, { name: 'contactName', label: 'Contact Name' }].filter((field) => !agentLocked || String(state.paymentHouse[field.name] || '').trim())} values={state.paymentHouse} onChange={setGroup('paymentHouse')} />
+              </fieldset>
+            </div>
+            )}
           </div>
+          )}
+        </section>
+        )}
+
+        <section className="card">
+          <h2>EDI Technical Contact</h2>
+          <Fields prefix="dev" fields={DEVELOPER_FIELDS} values={state.developer} onChange={setGroup('developer')} errors={err('developer')} />
         </section>
 
         <section className="card">
           <h2>Transaction Sets <small>ANSI X12, Version 4010 (check the appropriate boxes)</small></h2>
-          <div className="cols">
-            {[['dayRoss', 'Day & Ross to provide specs'], ['customer', 'Customer to provide specs']].map(([key, title]) => (
-              <div key={key}>
-                <h3>{title}</h3>
-                {TRANSACTION_SETS.filter((t) => t[key]).map((t) => (
-                  <label key={t.code} className="inline block">
-                    <input type="checkbox" checked={state.sets[key].includes(t.code)} onChange={() => setState((s) => ({ ...s, sets: { ...s.sets, [key]: toggle(s.sets[key], t.code) } }))} />
-                    <span><b>{t.code}</b> {t.name}</span>
-                  </label>
-                ))}
-              </div>
+          <div>
+            {TRANSACTION_SETS.map((t) => (
+              <label key={t.code} className="inline block">
+                <input type="checkbox" checked={state.sets.includes(t.code)} onChange={() => setState((s) => {
+                  const next = toggle(s.sets, t.code)
+                  const turningOn = !s.sets.includes(t.code)
+                  if (turningOn && (t.code === '204' || t.code === '211')) {
+                    const other = t.code === '204' ? '211' : '204'
+                    return { ...s, sets: next.filter((code) => code !== other) }
+                  }
+                  return { ...s, sets: next }
+                })} />
+                <span><b>{t.code}</b> {t.name}</span>
+              </label>
             ))}
           </div>
         </section>
