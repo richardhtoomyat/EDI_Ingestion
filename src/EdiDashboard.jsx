@@ -414,6 +414,7 @@ export default function EdiDashboard({ profile, onSignOut }) {
   const [dragOver, setDragOver] = useState('')
   const [stagePrompt, setStagePrompt] = useState(null)
   const [estimateDraft, setEstimateDraft] = useState('')
+  const firstName = profile?.firstName || ''
   const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
 
   useEffect(() => {
@@ -567,9 +568,13 @@ export default function EdiDashboard({ profile, onSignOut }) {
   )
 
   return (
-    <Shell title="EDI Portal" onSignOut={onSignOut} nav={headerNav}>
+    <Shell
+      title="EDI Portal"
+      subtitle={firstName ? `Welcome, ${firstName}` : (welcome ? `Welcome, ${welcome}` : '')}
+      onSignOut={onSignOut}
+      nav={headerNav}
+    >
       <main className="page edi-page">
-        {welcome && <p className="welcome-line">Welcome, {welcome}</p>}
         <div className="dash-top">
           <h2 className="dash-title">{tabTitle}</h2>
         </div>

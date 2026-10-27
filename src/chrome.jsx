@@ -2,12 +2,15 @@ import logo from './assets/logo.png'
 
 export const EDI_EMAIL = 'edirequest@dayandrossinc.ca'
 
-export function SiteHeader({ title = 'EDI Customer Onboarding', onSignOut, nav }) {
+export function SiteHeader({ title = 'EDI Customer Onboarding', subtitle, onSignOut, nav }) {
   return (
     <header className="site-header no-print">
       <div className="site-header-inner">
         <img className="logo" src={logo} alt="Day & Ross" />
-        <span className="site-title">{title}</span>
+        <div className="site-title-block">
+          <span className="site-title">{title}</span>
+          {subtitle && <span className="site-subtitle">{subtitle}</span>}
+        </div>
         {nav && <div className="site-header-nav">{nav}</div>}
         {onSignOut && (
           <button type="button" className="secondary header-signout" onClick={onSignOut}>
@@ -28,10 +31,10 @@ export function SiteFooter() {
   )
 }
 
-export function Shell({ title, onSignOut, nav, children }) {
+export function Shell({ title, subtitle, onSignOut, nav, children }) {
   return (
     <div className="app-shell">
-      <SiteHeader title={title} onSignOut={onSignOut} nav={nav} />
+      <SiteHeader title={title} subtitle={subtitle} onSignOut={onSignOut} nav={nav} />
       <div className="app-shell-body">{children}</div>
       <SiteFooter />
     </div>
