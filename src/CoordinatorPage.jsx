@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Shell } from './chrome.jsx'
 import { loadOnboardings, traderLabel, updateTraderIds } from './onboardingLink.js'
 
@@ -106,30 +107,31 @@ export default function CoordinatorPage({ profile, onSignOut }) {
             </table>
           )}
         </section>
-        {open && (
-          <div className="edi-detail" role="dialog" aria-label={`Assign trader ids for ${open.companyName}`}>
-            <button type="button" className="edi-scrim" aria-label="Close" onClick={() => setOpenId('')} />
-            <form className="edi-sheet" onSubmit={save}>
-              <div className="dash-top">
-                <h2>{open.companyName}</h2>
-                <button type="button" className="secondary status-edit" onClick={() => setOpenId('')}>Close</button>
-              </div>
-              <p className="intro">{open.customerEmail} · Technow {open.technowRequestId || open.id} · Sales agent {open.agentName || '—'} · Created {formatSubmitted(open.createdAt)}</p>
-              <label className="field">
-                <span>TraderID (QA)</span>
-                <input value={qa} autoComplete="off" onChange={(event) => setQa(event.target.value)} />
-              </label>
-              <label className="field">
-                <span>TraderID (Prod)</span>
-                <input value={prod} autoComplete="off" onChange={(event) => setProd(event.target.value)} />
-              </label>
-              <div className="actions">
-                <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-              </div>
-            </form>
-          </div>
-        )}
       </main>
+      {open && createPortal(
+        <div className="edi-detail" role="dialog" aria-modal="true" aria-label={`Assign trader ids for ${open.companyName}`}>
+          <button type="button" className="edi-scrim" aria-label="Close" onClick={() => setOpenId('')} />
+          <form className="edi-sheet" onSubmit={save}>
+            <div className="dash-top">
+              <h2>{open.companyName}</h2>
+              <button type="button" className="secondary status-edit" onClick={() => setOpenId('')}>Close</button>
+            </div>
+            <p className="intro">{open.customerEmail} · Technow {open.technowRequestId || open.id} · Sales agent {open.agentName || '—'} · Created {formatSubmitted(open.createdAt)}</p>
+            <label className="field">
+              <span>TraderID (QA)</span>
+              <input value={qa} autoComplete="off" onChange={(event) => setQa(event.target.value)} />
+            </label>
+            <label className="field">
+              <span>TraderID (Prod)</span>
+              <input value={prod} autoComplete="off" onChange={(event) => setProd(event.target.value)} />
+            </label>
+            <div className="actions">
+              <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+            </div>
+          </form>
+        </div>,
+        document.body,
+      )}
     </Shell>
   )
 }

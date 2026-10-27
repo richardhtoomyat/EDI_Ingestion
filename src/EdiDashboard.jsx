@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Shell } from './chrome.jsx'
 import { CreateOnboarding } from './AgentApp.jsx'
 import { emptyDeveloper } from './onboardingLink.js'
@@ -398,67 +399,68 @@ export default function EdiDashboard({ profile, onSignOut }) {
           </section>
         )}
 
-        {open && (
-          <div className="edi-detail" role="dialog" aria-label={`${open.company} onboarding`}>
-            <button type="button" className="edi-scrim" aria-label="Close" onClick={() => setOpenId('')} />
-            <div className="edi-sheet">
-              <div className="dash-top">
-                <div>
-                  <h2>{open.company}</h2>
-                  <p className="edi-created">Created on {open.created}</p>
-                  <p className="intro">Sales Agent: {open.agent || '—'}</p>
-                  <p className="intro">Coordinator: {personName(team, open.ownerId) || '—'}</p>
-                </div>
-                <button type="button" className="secondary status-edit" onClick={() => setOpenId('')}>Close</button>
+      </main>
+      {open && createPortal(
+        <div className="edi-detail" role="dialog" aria-modal="true" aria-label={`${open.company} onboarding`}>
+          <button type="button" className="edi-scrim" aria-label="Close" onClick={() => setOpenId('')} />
+          <div className="edi-sheet">
+            <div className="dash-top">
+              <div>
+                <h2>{open.company}</h2>
+                <p className="edi-created">Created on {open.created}</p>
+                <p className="intro">Sales Agent: {open.agent || '—'}</p>
+                <p className="intro">Coordinator: {personName(team, open.ownerId) || '—'}</p>
               </div>
-              <section className="edi-tech">
-                <h3>Technical contact</h3>
-                <p className="intro"><span>Name:</span> {open.technicalContact}</p>
-                <p className="intro"><span>Email:</span> {open.technicalEmail}</p>
-                <p className="intro"><span>Mobile:</span> {open.technicalMobile}</p>
-              </section>
-              <p><span className={`edi-pill ${open.status}`}>{statusLabel(open.status, open, team)}</span></p>
-              {gaps(open).length > 0 && <div className="flag-row">{gaps(open).map((flag) => <span key={flag} className="edi-flag">{flag}</span>)}</div>}
-              <p className="intro">Trader ID QA: {open.traderIdQa || '—'} · Trader ID Prod: {open.traderIdProd || '—'}</p>
-              <h3>214 codes</h3>
-              {open.codes.length === 0 && <p className="intro">No 214 statuses selected yet.</p>}
-              {open.needsAt7Mapping && (
-                <p className="intro">Custom mapping values need EDI work before go-live.</p>
-              )}
-              <ul className="code-review">
-                {open.codes.map((code) => (
-                  <li key={`${code.name}-${code.at701}-${code.at702}`}>
-                    <span>{code.name}{code.isCustom ? ' (custom)' : ''}</span>
-                    <b className={code.custom.includes('at701') ? 'custom-code' : ''}>{code.at701}</b>
-                    <b className={code.custom.includes('at702') ? 'custom-code' : ''}>{code.at702}</b>
-                  </li>
+              <button type="button" className="secondary status-edit" onClick={() => setOpenId('')}>Close</button>
+            </div>
+            <section className="edi-tech">
+              <h3>Technical contact</h3>
+              <p className="intro"><span>Name:</span> {open.technicalContact}</p>
+              <p className="intro"><span>Email:</span> {open.technicalEmail}</p>
+              <p className="intro"><span>Mobile:</span> {open.technicalMobile}</p>
+            </section>
+            <p><span className={`edi-pill ${open.status}`}>{statusLabel(open.status, open, team)}</span></p>
+            {gaps(open).length > 0 && <div className="flag-row">{gaps(open).map((flag) => <span key={flag} className="edi-flag">{flag}</span>)}</div>}
+            <p className="intro">Trader ID QA: {open.traderIdQa || '—'} · Trader ID Prod: {open.traderIdProd || '—'}</p>
+            <h3>214 codes</h3>
+            {open.codes.length === 0 && <p className="intro">No 214 statuses selected yet.</p>}
+            {open.needsAt7Mapping && (
+              <p className="intro">Custom mapping values need EDI work before go-live.</p>
+            )}
+            <ul className="code-review">
+              {open.codes.map((code) => (
+                <li key={`${code.name}-${code.at701}-${code.at702}`}>
+                  <span>{code.name}{code.isCustom ? ' (custom)' : ''}</span>
+                  <b className={code.custom.includes('at701') ? 'custom-code' : ''}>{code.at701}</b>
+                  <b className={code.custom.includes('at702') ? 'custom-code' : ''}>{code.at702}</b>
+                </li>
+              ))}
+            </ul>
+            <label className="field">
+              <span>EDI owner</span>
+              <select
+                value={open.ownerId}
+                onChange={(event) => assign(open.id, event.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {team.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {[person.firstName, person.lastName].filter(Boolean).join(' ') || person.email}
+                  </option>
                 ))}
-              </ul>
-              <label className="field">
-                <span>EDI owner</span>
-                <select
-                  value={open.ownerId}
-                  onChange={(event) => assign(open.id, event.target.value)}
-                >
-                  <option value="">Unassigned</option>
-                  {team.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {[person.firstName, person.lastName].filter(Boolean).join(' ') || person.email}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Internal note</span>
-                <textarea rows={3} value={open.note} placeholder="Only the EDI team sees this" onChange={(event) => patch(open.id, { note: event.target.value })} />
-              </label>
-              <div className="actions">
-                <button type="button" onClick={() => openRecord(open.id)}>View form</button>
-              </div>
+              </select>
+            </label>
+            <label className="field">
+              <span>Internal note</span>
+              <textarea rows={3} value={open.note} placeholder="Only the EDI team sees this" onChange={(event) => patch(open.id, { note: event.target.value })} />
+            </label>
+            <div className="actions">
+              <button type="button" onClick={() => openRecord(open.id)}>View form</button>
             </div>
           </div>
-        )}
-      </main>
+        </div>,
+        document.body,
+      )}
     </Shell>
   )
 }
