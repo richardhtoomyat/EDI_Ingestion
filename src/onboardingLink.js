@@ -134,8 +134,9 @@ export function onboardingUrl(record) {
 
 export function customerRoute() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  if (path === '/dev/sale') return { kind: 'salePreview' }
-  if (path === '/dev/edi') return { kind: 'ediPreview' }
+  // Local-only previews — never available on Vercel production builds
+  if (import.meta.env.DEV && path === '/dev/sale') return { kind: 'salePreview' }
+  if (import.meta.env.DEV && path === '/dev/edi') return { kind: 'ediPreview' }
   if (path === '/' || path === '/edi' || path === '/coordinator') return { kind: 'agent' }
   if (path.startsWith('/c/')) {
     const token = decodeURIComponent(path.slice(3))
