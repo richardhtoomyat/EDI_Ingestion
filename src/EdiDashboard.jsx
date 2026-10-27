@@ -542,6 +542,8 @@ export default function EdiDashboard({ profile, onSignOut, onAccount }) {
         profile={profile}
         record={editing}
         onCancel={() => setEditing(null)}
+        onSignOut={onSignOut}
+        onAccount={onAccount}
         onCreated={(saved) => {
           setRecords((current) => current.map((item) => (item.id === saved.id ? saved : item)))
           setEditing(saved)

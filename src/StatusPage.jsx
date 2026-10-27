@@ -64,6 +64,9 @@ function StatusCodeList({ title, list, selected, codeEdits, openIds, group, onTo
 
 export default function StatusPage({
   title,
+  profile,
+  onSignOut,
+  onAccount,
   normal,
   exception,
   normalCodes = {},
@@ -79,8 +82,15 @@ export default function StatusPage({
   continueLabel = 'Next',
   error,
 }) {
+  const firstName = profile?.firstName || ''
   return (
-    <Shell title={title}>
+    <Shell
+      title={title}
+      subtitle={firstName ? `Welcome, ${firstName}` : ''}
+      profile={profile}
+      onSignOut={onSignOut}
+      onAccount={onAccount}
+    >
       <main className="page">
         <section className="card">
           <h2>214 Status <small>Select the statuses Day &amp; Ross should send</small></h2>

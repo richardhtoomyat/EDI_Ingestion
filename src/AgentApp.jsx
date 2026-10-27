@@ -130,7 +130,18 @@ function Dashboard({ profile, records, error, onCreate, onView, onSignOut, onAcc
   )
 }
 
-export function CreateOnboarding({ profile, record, onCancel, onCreated }) {
+function salesShellProps(profile, onSignOut, onAccount, title = 'EDI Sales Agent') {
+  const firstName = profile?.firstName || ''
+  return {
+    title,
+    subtitle: firstName ? `Welcome, ${firstName}` : '',
+    profile,
+    onSignOut,
+    onAccount,
+  }
+}
+
+export function CreateOnboarding({ profile, record, onCancel, onCreated, onSignOut, onAccount }) {
   const [draft, setDraft] = useState(() => {
     const base = record ? structuredClone(record.draft) : emptyDraft()
     return {
@@ -253,6 +264,9 @@ export function CreateOnboarding({ profile, record, onCancel, onCreated }) {
     return (
       <StatusPage
         title="EDI Sales Agent"
+        profile={profile}
+        onSignOut={onSignOut}
+        onAccount={onAccount}
         normal={draft.normalStatuses || []}
         exception={draft.exceptionStatuses || []}
         normalCodes={draft.normalCodes || {}}
@@ -324,6 +338,9 @@ export function CreateOnboarding({ profile, record, onCancel, onCreated }) {
   if (page === 'review') {
     return (
       <AgentReview
+        profile={profile}
+        onSignOut={onSignOut}
+        onAccount={onAccount}
         draft={buildPayload()}
         error={error}
         busy={busy}
@@ -341,6 +358,9 @@ export function CreateOnboarding({ profile, record, onCancel, onCreated }) {
   if (page === 'created' && savedRecord) {
     return (
       <Created
+        profile={profile}
+        onSignOut={onSignOut}
+        onAccount={onAccount}
         record={savedRecord}
         draft={buildPayload()}
         onDone={onCancel}
@@ -349,7 +369,7 @@ export function CreateOnboarding({ profile, record, onCancel, onCreated }) {
   }
 
   return (
-    <Shell title="EDI Sales Agent">
+    <Shell {...salesShellProps(profile, onSignOut, onAccount)}>
       <main className="page">
         <form onSubmit={submit} noValidate>
           <section className="card">
@@ -736,9 +756,9 @@ function ReviewSummary({ draft }) {
   )
 }
 
-function AgentReview({ draft, error, busy, isEdit, onBack, onCreate }) {
+function AgentReview({ profile, onSignOut, onAccount, draft, error, busy, isEdit, onBack, onCreate }) {
   return (
-    <Shell title="EDI Sales Agent">
+    <Shell {...salesShellProps(profile, onSignOut, onAccount)}>
       <main className="page">
         <div className="banner ok no-print">Review the onboarding details, then create it.</div>
         {error && <div className="banner err" role="alert">{error}</div>}
@@ -762,7 +782,7 @@ function lastModifiedLabel(record) {
   return name || team
 }
 
-function Created({ record, draft, onDone }) {
+function Created({ profile, onSignOut, onAccount, record, draft, onDone }) {
   const company = draft?.mainAccount?.companyName || record.companyName || 'Customer'
   const sets = (draft?.sets || []).join(', ') || '—'
   const modifiedBy = lastModifiedLabel(record)
@@ -785,7 +805,7 @@ function Created({ record, draft, onDone }) {
   ].filter(Boolean).join('\n')
 
   return (
-    <Shell title="EDI Sales Agent">
+    <Shell {...salesShellProps(profile, onSignOut, onAccount)}>
       <main className="page">
         <div className="banner ok no-print">Created</div>
         <section className="card no-print">
@@ -857,6 +877,8 @@ export default function AgentApp({ profile, onSignOut, onAccount }) {
         profile={profile}
         record={view === 'edit' ? editing : null}
         onCancel={() => { setEditing(null); setView('dashboard') }}
+        onSignOut={onSignOut}
+        onAccount={onAccount}
         onCreated={(saved) => {
           setRecords((current) => view === 'edit'
             ? current.map((item) => (item.id === saved.id ? saved : item))
