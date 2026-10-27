@@ -431,8 +431,7 @@ button.edi-tab.active, button.edi-tab.active:hover { background: var(--black); c
 .edi-table { margin-top: 8px; table-layout: fixed; width: 100%; }
 .edi-table tr { cursor: grab; }
 .edi-table th { width: auto; }
-.edi-col-customer { width: 34%; }
-.edi-col-agent { width: 18%; }
+.edi-col-customer { width: 42%; }
 .edi-col-status { width: 11.5rem; }
 .edi-col-flags { width: auto; }
 .edi-col-action { width: 5.5rem; }

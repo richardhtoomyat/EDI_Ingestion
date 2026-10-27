@@ -212,7 +212,6 @@ function OnboardingTable({ rows, team, onOpen, draggable = false }) {
     <table className="edi-table">
       <colgroup>
         <col className="edi-col-customer" />
-        <col className="edi-col-agent" />
         <col className="edi-col-status" />
         <col className="edi-col-flags" />
         <col className="edi-col-action" />
@@ -220,7 +219,6 @@ function OnboardingTable({ rows, team, onOpen, draggable = false }) {
       <thead>
         <tr>
           <th>Customer</th>
-          <th>Sales agent</th>
           <th>Status</th>
           <th>Flags</th>
           <th />
@@ -234,7 +232,6 @@ function OnboardingTable({ rows, team, onOpen, draggable = false }) {
             onDragStart={draggable ? (event) => event.dataTransfer.setData('text/plain', item.id) : undefined}
           >
             <td><strong>{item.company}</strong><div className="intro">{item.email}</div></td>
-            <td>{item.agent}</td>
             <td><span className={`edi-pill ${item.status}`}>{statusLabel(item.status, item, team)}</span></td>
             <td>{gaps(item).map((flag) => <span key={flag} className="edi-flag">{flag}</span>)}</td>
             <td><button type="button" className="secondary status-edit" onClick={() => onOpen(item.id)}>Open</button></td>
@@ -357,7 +354,6 @@ function KpiTab({ items, onOpen }) {
             <thead>
               <tr>
                 <th>Customer</th>
-                <th>Sales agent</th>
                 <th>Age</th>
                 <th />
               </tr>
@@ -366,7 +362,6 @@ function KpiTab({ items, onOpen }) {
               {readyUnassigned.map((item) => (
                 <tr key={item.id}>
                   <td><strong>{item.company}</strong><div className="intro">{item.email}</div></td>
-                  <td>{item.agent}</td>
                   <td><span className={`edi-pill age-${ageBucket(item.age)}`}>{item.age}d</span></td>
                   <td><button type="button" className="secondary status-edit" onClick={() => onOpen(item.id)}>Open</button></td>
                 </tr>
