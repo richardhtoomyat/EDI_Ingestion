@@ -208,6 +208,26 @@ export function updateTraderIds(id, { traderIdQa, traderIdProd }) {
   return sendOnboarding('/api/onboardings', 'PATCH', { id, traderIdQa, traderIdProd })
 }
 
+export async function inviteUsers({ emails, role, message }) {
+  const response = await fetch('/api/invite', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({
+      emails,
+      role,
+      message,
+      redirectTo: window.location.origin,
+    }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const error = new Error(payload.error || 'Could not send invitations')
+    error.failed = payload.failed
+    throw error
+  }
+  return payload
+}
+
 export function updateEdiAssignment(id, { ediOwnerId, ediNote, completed, ediStage, estimatedCompletionDate }) {
   const body = { id }
   if (ediOwnerId !== undefined) body.ediOwnerId = ediOwnerId

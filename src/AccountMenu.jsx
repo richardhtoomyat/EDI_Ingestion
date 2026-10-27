@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 const THEME_KEY = 'edi-theme'
 const TZ_KEY = 'edi-timezone'
@@ -323,21 +324,172 @@ export function AccountPage({ profile, onSaved, onBack, onSignOut }) {
   )
 }
 
+const INVITE_ROLES = [
+  { value: 'sale', label: 'Sales' },
+  { value: 'edi', label: 'EDI' },
+  { value: 'coordinator', label: 'Coordinator' },
+  { value: 'admin', label: 'Admin' },
+]
+
+const DEFAULT_INVITE_MESSAGE = 'I would like to invite you to the Day & Ross EDI workspace. Please use the link in this email to set up your account and join.'
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim())
+}
+
+function InviteUserModal({ onClose, onInvited }) {
+  const [emails, setEmails] = useState([])
+  const [draft, setDraft] = useState('')
+  const [role, setRole] = useState('sale')
+  const [message, setMessage] = useState(DEFAULT_INVITE_MESSAGE)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const addEmails = (raw) => {
+    const parts = String(raw || '').split(/[\s,;]+/).map((item) => item.trim().toLowerCase()).filter(Boolean)
+    if (!parts.length) return
+    const invalid = parts.find((item) => !isValidEmail(item))
+    if (invalid) {
+      setError(`Invalid email: ${invalid}`)
+      return
+    }
+    setError('')
+    setEmails((current) => [...new Set([...current, ...parts])])
+    setDraft('')
+  }
+
+  const submit = async (event) => {
+    event.preventDefault()
+    if (draft.trim()) addEmails(draft)
+    const nextEmails = draft.trim()
+      ? [...new Set([...emails, ...String(draft).split(/[\s,;]+/).map((item) => item.trim().toLowerCase()).filter(Boolean)])]
+      : emails
+    if (!nextEmails.length) {
+      setError('Add at least one email address')
+      return
+    }
+    if (nextEmails.some((item) => !isValidEmail(item))) {
+      setError('One or more email addresses are invalid')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const { inviteUsers } = await import('./onboardingLink.js')
+      const result = await inviteUsers({ emails: nextEmails, role, message })
+      onInvited?.(result)
+      onClose?.()
+    } catch (err) {
+      setError(err.message || 'Could not send invitations')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return createPortal(
+    <div className="edi-detail invite-modal" role="dialog" aria-modal="true" aria-label="Invite to Workspace">
+      <button type="button" className="edi-scrim" aria-label="Close" onClick={onClose} />
+      <form className="edi-sheet invite-sheet" onSubmit={submit}>
+        <div className="dash-top">
+          <h2>Invite to Workspace</h2>
+          <button type="button" className="secondary status-edit" onClick={onClose}>Close</button>
+        </div>
+        {error && <div className="banner err" role="alert">{error}</div>}
+        <div className="invite-grid">
+          <div className="invite-fields">
+            <label className="field">
+              <span>E-Mail Addresses <b className="req"> *</b></span>
+              <div className="email-chips">
+                {emails.map((email) => (
+                  <span key={email} className="email-chip">
+                    {email}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${email}`}
+                      onClick={() => setEmails((current) => current.filter((item) => item !== email))}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <input
+                  value={draft}
+                  placeholder={emails.length ? 'Add another email' : 'name@dayross.com'}
+                  autoComplete="off"
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ',' || event.key === ';') {
+                      event.preventDefault()
+                      addEmails(draft)
+                    }
+                    if (event.key === 'Backspace' && !draft && emails.length) {
+                      setEmails((current) => current.slice(0, -1))
+                    }
+                  }}
+                  onBlur={() => { if (draft.trim()) addEmails(draft) }}
+                />
+              </div>
+            </label>
+            <label className="field">
+              <span>Set Role <b className="req"> *</b></span>
+              <select value={role} onChange={(event) => setRole(event.target.value)}>
+                {INVITE_ROLES.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Message</span>
+              <textarea rows={5} value={message} onChange={(event) => setMessage(event.target.value)} />
+              <span className="intro">A header and the invite link are added automatically.</span>
+            </label>
+          </div>
+          <aside className="invite-help">
+            <h3>How to Invite?</h3>
+            <p className="intro">Provide the email addresses of the users you want in this workspace. Press Enter after each address.</p>
+            <p className="intro">They receive an email from the app to finish account setup (name and password), then can sign in with the role you selected.</p>
+          </aside>
+        </div>
+        <div className="actions">
+          <button type="button" className="secondary" disabled={busy} onClick={onClose}>Cancel</button>
+          <button type="submit" disabled={busy}>{busy ? 'Inviting…' : 'Invite'}</button>
+        </div>
+      </form>
+    </div>,
+    document.body,
+  )
+}
+
 export function AdministrationPage({ onBack }) {
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [notice, setNotice] = useState('')
+
   return (
     <main className="page edi-page">
       <div className="dash-top">
         <div>
           <h2 className="dash-title">Administration</h2>
-          <p className="intro">Admin tools will appear here.</p>
+          <p className="intro">Manage workspace access for Sales, EDI, Coordinator, and Admin users.</p>
         </div>
         <div className="actions">
           <button type="button" className="secondary" onClick={onBack}>Back</button>
+          <button type="button" onClick={() => { setNotice(''); setInviteOpen(true) }}>Invite user</button>
         </div>
       </div>
+      {notice && <div className="banner ok" role="status">{notice}</div>}
       <section className="card">
-        <p className="intro">This page is empty for now.</p>
+        <h3>Users</h3>
+        <p className="intro">Invite teammates by email and assign their portal role. Admin can only be granted here or via SQL.</p>
+        <div className="actions">
+          <button type="button" onClick={() => { setNotice(''); setInviteOpen(true) }}>Invite user</button>
+        </div>
       </section>
+      {inviteOpen && (
+        <InviteUserModal
+          onClose={() => setInviteOpen(false)}
+          onInvited={(result) => setNotice(result.message || 'Invitations sent.')}
+        />
+      )}
     </main>
   )
 }

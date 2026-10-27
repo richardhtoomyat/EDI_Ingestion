@@ -717,6 +717,72 @@ button.edi-scrim, button.edi-scrim:hover { position: absolute; inset: 0; backgro
 .account-signout { color: #f3f3f3; }
 .account-card input:read-only { background: #f3f4f5; color: #6b6e73; }
 
+/* Invite user modal */
+.invite-modal { justify-content: center; align-items: center; }
+.invite-sheet {
+  width: min(860px, calc(100vw - 32px));
+  height: auto;
+  max-height: calc(100dvh - 48px);
+  margin: auto;
+  align-self: center;
+  border-radius: 6px;
+}
+.invite-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, .8fr);
+  gap: 24px;
+  margin-top: 8px;
+}
+.invite-help {
+  background: #fafbfc;
+  border: 1px solid var(--line);
+  padding: 16px;
+}
+.invite-help h3 { margin: 0 0 10px; font-size: 1rem; }
+.email-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-height: 46px;
+  padding: 6px 8px;
+  border: 1px solid var(--grey);
+  background: #fff;
+}
+.email-chips input {
+  flex: 1 1 160px;
+  min-width: 140px;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 6px 4px !important;
+  margin: 0;
+}
+.email-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: .82rem;
+  font-weight: 500;
+}
+.email-chip button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0 2px;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+  transform: none;
+}
+@media (max-width: 720px) {
+  .invite-grid { grid-template-columns: 1fr; }
+}
+
 /* Theme support */
 html[data-theme='dark'] {
   color-scheme: dark;

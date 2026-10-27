@@ -19,6 +19,7 @@ import {
   signInWithPassword,
   signOut,
   supabase,
+  updateProfile,
 } from './auth.js'
 
 function readWorkplace() {
@@ -176,13 +177,43 @@ export default function AuthGate() {
         setFirstName(existing.firstName)
         setLastName(existing.lastName)
         setError('')
-        setScreen(screenForRole(existing.role))
+        if (!existing.firstName.trim() || !existing.lastName.trim()) {
+          setScreen('needName')
+        } else {
+          setScreen(screenForRole(existing.role))
+        }
         return
       }
       const names = namesFromUser(user)
+      const invitedRole = String(user.user_metadata?.role || '').trim()
       setFirstName((current) => current.trim() || names.firstName)
       setLastName((current) => current.trim() || names.lastName)
       setError('')
+      if (['sale', 'edi', 'coordinator', 'admin'].includes(invitedRole)) {
+        try {
+          const first = names.firstName.trim()
+          const last = names.lastName.trim()
+          const saved = await saveProfile({
+            userId: user.id,
+            email,
+            firstName: first || ' ',
+            lastName: last || ' ',
+            role: invitedRole,
+          })
+          const cleaned = {
+            ...saved,
+            firstName: first,
+            lastName: last,
+          }
+          setProfile(cleaned)
+          setFirstName(first)
+          setLastName(last)
+          setScreen(first && last ? screenForRole(invitedRole) : 'needName')
+          return
+        } catch {
+          // Fall through to normal onboarding if profile create fails.
+        }
+      }
       setScreen((current) => {
         if (current === 'needName' || current === 'needRole') return current
         if (!names.firstName.trim() || !names.lastName.trim()) return 'needName'
@@ -397,13 +428,30 @@ export default function AuthGate() {
           if (first !== undefined) setFirstName(first)
           if (last !== undefined) setLastName(last)
         }}
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault()
           if (!firstName.trim() || !lastName.trim()) {
             setError('Enter your first and last name.')
             return
           }
           setError('')
+          if (profile?.id) {
+            setBusy(true)
+            try {
+              const saved = await updateProfile({
+                userId: profile.id,
+                firstName,
+                lastName,
+              })
+              setProfile(saved)
+              setScreen(screenForRole(saved.role))
+            } catch (err) {
+              setError(err.message || 'Could not save your name.')
+            } finally {
+              setBusy(false)
+            }
+            return
+          }
           setScreen('needRole')
         }}
         onSignOut={handleSignOut}
