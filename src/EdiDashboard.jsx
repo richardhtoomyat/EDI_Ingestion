@@ -393,7 +393,6 @@ export default function EdiDashboard({ profile, onSignOut }) {
   const [busyId, setBusyId] = useState('')
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
-  const [agent, setAgent] = useState('all')
   const [openId, setOpenId] = useState('')
   const [editing, setEditing] = useState(null)
   const [dragOver, setDragOver] = useState('')
@@ -422,7 +421,6 @@ export default function EdiDashboard({ profile, onSignOut }) {
   }, [])
 
   const items = useMemo(() => records.map(recordToItem), [records])
-  const agents = [...new Set(items.map((item) => item.agent).filter(Boolean))].sort()
   const sortBoard = (list) => [...list].sort((a, b) => {
     const aDone = isDoneStatus(a.status) ? 1 : 0
     const bDone = isDoneStatus(b.status) ? 1 : 0
@@ -431,14 +429,13 @@ export default function EdiDashboard({ profile, onSignOut }) {
   })
   const rows = useMemo(() => {
     const filtered = items.filter((item) => {
-      const haystack = `${item.company} ${item.email} ${item.agent}`.toLowerCase()
+      const haystack = `${item.company} ${item.email}`.toLowerCase()
       if (query.trim() && !haystack.includes(query.trim().toLowerCase())) return false
       if (status !== 'all' && item.status !== status) return false
-      if (agent !== 'all' && item.agent !== agent) return false
       return true
     })
     return sortBoard(filtered)
-  }, [items, query, status, agent])
+  }, [items, query, status])
   const myRows = useMemo(() => {
     if (!profile?.id) return []
     return sortBoard(items.filter((item) => item.ownerId === profile.id))
@@ -568,19 +565,12 @@ export default function EdiDashboard({ profile, onSignOut }) {
               <div className="edi-filters">
                 <label className="field">
                   <span>Search</span>
-                  <input value={query} placeholder="Company, email, or sales agent" onChange={(event) => setQuery(event.target.value)} />
+                  <input value={query} placeholder="Company or email" onChange={(event) => setQuery(event.target.value)} />
                 </label>
                 <label className="field">
                   <span>Status</span>
                   <select value={status} onChange={(event) => setStatus(event.target.value)}>
                     {STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Sales agent</span>
-                  <select value={agent} onChange={(event) => setAgent(event.target.value)}>
-                    <option value="all">All agents</option>
-                    {agents.map((name) => <option key={name} value={name}>{name}</option>)}
                   </select>
                 </label>
               </div>

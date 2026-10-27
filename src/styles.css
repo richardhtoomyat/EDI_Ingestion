@@ -422,7 +422,7 @@ fieldset.locked-fields .inline { color: #6b6e73; }
 .edi-stats div { background: #fff; border: 1px solid var(--line); border-top: 3px solid var(--black); padding: 14px 16px; }
 .edi-stats b { display: block; font-size: 1.6rem; line-height: 1.1; }
 .edi-stats span { color: var(--grey); font-size: .8rem; }
-.edi-filters { display: grid; grid-template-columns: 1.4fr .8fr .8fr; gap: 12px; }
+.edi-filters { display: grid; grid-template-columns: 1.6fr .9fr; gap: 12px; }
 .edi-filters select { font: inherit; font-weight: 400; padding: 10px 12px; border: 1px solid var(--grey); background: #fff; width: 100%; }
 .edi-empty { margin: 8px 0 0; }
 .edi-tabs { display: flex; gap: 8px; }
