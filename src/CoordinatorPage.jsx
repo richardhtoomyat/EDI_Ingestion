@@ -8,7 +8,9 @@ function formatSubmitted(value) {
   return new Date(value).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export default function CoordinatorPage({ profile, onSignOut, onAccount }) {
+export default function CoordinatorPage({
+  profile, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
+}) {
   const [items, setItems] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,6 +65,9 @@ export default function CoordinatorPage({ profile, onSignOut, onAccount }) {
       profile={profile}
       onSignOut={onSignOut}
       onAccount={onAccount}
+      onSwitchWorkplace={onSwitchWorkplace}
+      onAdministration={onAdministration}
+      currentWorkplace={currentWorkplace}
     >
       <main className="page edi-page">
         <div className="dash-top">

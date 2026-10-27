@@ -3,7 +3,7 @@ create table public.profiles (
   email text not null,
   first_name text not null,
   last_name text not null,
-  role text not null check (role in ('sale', 'edi', 'coordinator')),
+  role text not null check (role in ('sale', 'edi', 'coordinator', 'admin')),
   created_at timestamptz not null default now()
 );
 

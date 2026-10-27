@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Shell, Chevron } from './chrome.jsx'
-import { AccountPage } from './AccountMenu.jsx'
+import { AccountPage, AdministrationPage, isAdminProfile } from './AccountMenu.jsx'
 import AgentApp from './AgentApp.jsx'
 import CoordinatorPage from './CoordinatorPage.jsx'
 import EdiDashboard from './EdiDashboard.jsx'
+
+const WORKPLACE_KEY = 'edi-workplace'
+const WORKPLACES = ['sale', 'edi', 'coordinator']
 import {
   authConfigured,
   createAccount,
@@ -18,7 +21,13 @@ import {
   supabase,
 } from './auth.js'
 
+function readWorkplace() {
+  const value = localStorage.getItem(WORKPLACE_KEY)
+  return WORKPLACES.includes(value) ? value : ''
+}
+
 function screenForRole(role) {
+  if (role === 'admin') return readWorkplace() || 'edi'
   if (role === 'sale') return 'sale'
   if (role === 'coordinator') return 'coordinator'
   return 'edi'
@@ -307,6 +316,27 @@ export default function AuthGate() {
     setScreen('account')
   }
 
+  const openAdministration = () => {
+    setAccountReturn(screen)
+    setScreen('admin')
+  }
+
+  const switchWorkplace = (workplace) => {
+    if (!WORKPLACES.includes(workplace)) return
+    localStorage.setItem(WORKPLACE_KEY, workplace)
+    setAccountReturn(null)
+    setScreen(workplace)
+  }
+
+  const portalAccountProps = profile ? {
+    profile,
+    onSignOut: handleSignOut,
+    onAccount: openAccount,
+    onSwitchWorkplace: isAdminProfile(profile) ? switchWorkplace : undefined,
+    onAdministration: isAdminProfile(profile) ? openAdministration : undefined,
+    currentWorkplace: WORKPLACES.includes(screen) ? screen : readWorkplace(),
+  } : {}
+
   if (screen === 'loading') {
     return <p className="page intro">Loading…</p>
   }
@@ -316,9 +346,7 @@ export default function AuthGate() {
       <Shell
         title="Account"
         subtitle={profile.firstName ? `Welcome, ${profile.firstName}` : ''}
-        profile={profile}
-        onSignOut={handleSignOut}
-        onAccount={() => {}}
+        {...portalAccountProps}
       >
         <AccountPage
           profile={profile}
@@ -334,16 +362,28 @@ export default function AuthGate() {
     )
   }
 
+  if (screen === 'admin' && profile && isAdminProfile(profile)) {
+    return (
+      <Shell
+        title="Administration"
+        subtitle={profile.firstName ? `Welcome, ${profile.firstName}` : ''}
+        {...portalAccountProps}
+      >
+        <AdministrationPage onBack={() => setScreen(accountReturn || screenForRole(profile.role))} />
+      </Shell>
+    )
+  }
+
   if (screen === 'sale' && profile) {
-    return <AgentApp profile={profile} onSignOut={handleSignOut} onAccount={openAccount} />
+    return <AgentApp {...portalAccountProps} />
   }
 
   if (screen === 'coordinator' && profile) {
-    return <CoordinatorPage profile={profile} onSignOut={handleSignOut} onAccount={openAccount} />
+    return <CoordinatorPage {...portalAccountProps} />
   }
 
   if (screen === 'edi' && profile) {
-    return <EdiDashboard profile={profile} onSignOut={handleSignOut} onAccount={openAccount} />
+    return <EdiDashboard {...portalAccountProps} />
   }
 
   if (screen === 'needName') {

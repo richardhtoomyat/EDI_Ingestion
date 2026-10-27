@@ -399,7 +399,9 @@ export function EdiDashboardPreview() {
   )
 }
 
-export default function EdiDashboard({ profile, onSignOut, onAccount }) {
+export default function EdiDashboard({
+  profile, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
+}) {
   const [tab, setTab] = useState('board')
   const [records, setRecords] = useState([])
   const [team, setTeam] = useState([])
@@ -544,6 +546,9 @@ export default function EdiDashboard({ profile, onSignOut, onAccount }) {
         onCancel={() => setEditing(null)}
         onSignOut={onSignOut}
         onAccount={onAccount}
+        onSwitchWorkplace={onSwitchWorkplace}
+        onAdministration={onAdministration}
+        currentWorkplace={currentWorkplace}
         onCreated={(saved) => {
           setRecords((current) => current.map((item) => (item.id === saved.id ? saved : item)))
           setEditing(saved)
@@ -576,6 +581,9 @@ export default function EdiDashboard({ profile, onSignOut, onAccount }) {
       profile={profile}
       onSignOut={onSignOut}
       onAccount={onAccount}
+      onSwitchWorkplace={onSwitchWorkplace}
+      onAdministration={onAdministration}
+      currentWorkplace={currentWorkplace}
       nav={headerNav}
     >
       <main className="page edi-page">

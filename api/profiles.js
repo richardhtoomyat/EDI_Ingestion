@@ -72,7 +72,8 @@ async function requireRole(req, roles) {
   }
   const rows = await supabase(`profiles?id=eq.${encodeURIComponent(payload.id)}&select=role,email,first_name,last_name`)
   const profile = rows?.[0]
-  if (!profile || !roles.includes(profile.role)) {
+  const allowed = profile && (profile.role === 'admin' || roles.includes(profile.role))
+  if (!allowed) {
     const error = new Error('Access required')
     error.status = 403
     throw error

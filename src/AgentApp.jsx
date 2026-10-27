@@ -62,7 +62,9 @@ function CopyFormIdButton({ id }) {
   return <button type="button" className="secondary" onClick={copy}>{copied ? 'Copied' : 'Copy form ID'}</button>
 }
 
-function Dashboard({ profile, records, error, onCreate, onView, onSignOut, onAccount }) {
+function Dashboard({
+  profile, records, error, onCreate, onView, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
+}) {
   const [query, setQuery] = useState('')
   const firstName = profile?.firstName || ''
   const needle = query.trim().toLowerCase()
@@ -85,6 +87,9 @@ function Dashboard({ profile, records, error, onCreate, onView, onSignOut, onAcc
       profile={profile}
       onSignOut={onSignOut}
       onAccount={onAccount}
+      onSwitchWorkplace={onSwitchWorkplace}
+      onAdministration={onAdministration}
+      currentWorkplace={currentWorkplace}
     >
       <main className="page">
         <div className="dash-top">
@@ -130,18 +135,24 @@ function Dashboard({ profile, records, error, onCreate, onView, onSignOut, onAcc
   )
 }
 
-function salesShellProps(profile, onSignOut, onAccount, title = 'EDI Sales Agent') {
-  const firstName = profile?.firstName || ''
+function salesShellProps(account, title = 'EDI Sales Agent') {
+  const firstName = account?.profile?.firstName || ''
   return {
     title,
     subtitle: firstName ? `Welcome, ${firstName}` : '',
-    profile,
-    onSignOut,
-    onAccount,
+    profile: account?.profile,
+    onSignOut: account?.onSignOut,
+    onAccount: account?.onAccount,
+    onSwitchWorkplace: account?.onSwitchWorkplace,
+    onAdministration: account?.onAdministration,
+    currentWorkplace: account?.currentWorkplace,
   }
 }
 
-export function CreateOnboarding({ profile, record, onCancel, onCreated, onSignOut, onAccount }) {
+export function CreateOnboarding({
+  profile, record, onCancel, onCreated, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
+}) {
+  const account = { profile, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace }
   const [draft, setDraft] = useState(() => {
     const base = record ? structuredClone(record.draft) : emptyDraft()
     return {
@@ -264,9 +275,7 @@ export function CreateOnboarding({ profile, record, onCancel, onCreated, onSignO
     return (
       <StatusPage
         title="EDI Sales Agent"
-        profile={profile}
-        onSignOut={onSignOut}
-        onAccount={onAccount}
+        {...account}
         normal={draft.normalStatuses || []}
         exception={draft.exceptionStatuses || []}
         normalCodes={draft.normalCodes || {}}
@@ -338,9 +347,7 @@ export function CreateOnboarding({ profile, record, onCancel, onCreated, onSignO
   if (page === 'review') {
     return (
       <AgentReview
-        profile={profile}
-        onSignOut={onSignOut}
-        onAccount={onAccount}
+        {...account}
         draft={buildPayload()}
         error={error}
         busy={busy}
@@ -358,9 +365,7 @@ export function CreateOnboarding({ profile, record, onCancel, onCreated, onSignO
   if (page === 'created' && savedRecord) {
     return (
       <Created
-        profile={profile}
-        onSignOut={onSignOut}
-        onAccount={onAccount}
+        {...account}
         record={savedRecord}
         draft={buildPayload()}
         onDone={onCancel}
@@ -369,7 +374,7 @@ export function CreateOnboarding({ profile, record, onCancel, onCreated, onSignO
   }
 
   return (
-    <Shell {...salesShellProps(profile, onSignOut, onAccount)}>
+    <Shell {...salesShellProps(account)}>
       <main className="page">
         <form onSubmit={submit} noValidate>
           <section className="card">
@@ -756,9 +761,14 @@ function ReviewSummary({ draft }) {
   )
 }
 
-function AgentReview({ profile, onSignOut, onAccount, draft, error, busy, isEdit, onBack, onCreate }) {
+function AgentReview({
+  profile, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
+  draft, error, busy, isEdit, onBack, onCreate,
+}) {
   return (
-    <Shell {...salesShellProps(profile, onSignOut, onAccount)}>
+    <Shell {...salesShellProps({
+      profile, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
+    })}>
       <main className="page">
         <div className="banner ok no-print">Review the onboarding details, then create it.</div>
         {error && <div className="banner err" role="alert">{error}</div>}
@@ -782,7 +792,10 @@ function lastModifiedLabel(record) {
   return name || team
 }
 
-function Created({ profile, onSignOut, onAccount, record, draft, onDone }) {
+function Created({
+  profile, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
+  record, draft, onDone,
+}) {
   const company = draft?.mainAccount?.companyName || record.companyName || 'Customer'
   const sets = (draft?.sets || []).join(', ') || '—'
   const modifiedBy = lastModifiedLabel(record)
@@ -805,7 +818,9 @@ function Created({ profile, onSignOut, onAccount, record, draft, onDone }) {
   ].filter(Boolean).join('\n')
 
   return (
-    <Shell {...salesShellProps(profile, onSignOut, onAccount)}>
+    <Shell {...salesShellProps({
+      profile, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
+    })}>
       <main className="page">
         <div className="banner ok no-print">Created</div>
         <section className="card no-print">
@@ -856,7 +871,9 @@ export function SalesFormPreview() {
   )
 }
 
-export default function AgentApp({ profile, onSignOut, onAccount }) {
+export default function AgentApp({
+  profile, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
+}) {
   const [view, setView] = useState('dashboard')
   const [records, setRecords] = useState([])
   const [loadError, setLoadError] = useState('')
@@ -879,6 +896,9 @@ export default function AgentApp({ profile, onSignOut, onAccount }) {
         onCancel={() => { setEditing(null); setView('dashboard') }}
         onSignOut={onSignOut}
         onAccount={onAccount}
+        onSwitchWorkplace={onSwitchWorkplace}
+        onAdministration={onAdministration}
+        currentWorkplace={currentWorkplace}
         onCreated={(saved) => {
           setRecords((current) => view === 'edit'
             ? current.map((item) => (item.id === saved.id ? saved : item))
@@ -896,6 +916,9 @@ export default function AgentApp({ profile, onSignOut, onAccount }) {
       onView={(record) => { setEditing(record); setView('edit') }}
       onSignOut={onSignOut}
       onAccount={onAccount}
+      onSwitchWorkplace={onSwitchWorkplace}
+      onAdministration={onAdministration}
+      currentWorkplace={currentWorkplace}
     />
   )
 }

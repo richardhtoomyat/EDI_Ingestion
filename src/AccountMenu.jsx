@@ -41,12 +41,31 @@ function displayName(profile) {
   return name || profile?.email || 'Account'
 }
 
-export function AccountMenu({ profile, onSignOut, onAccount }) {
+const WORKPLACES = [
+  { value: 'sale', label: 'Sales' },
+  { value: 'edi', label: 'EDI' },
+  { value: 'coordinator', label: 'Coordinator' },
+]
+
+export function isAdminProfile(profile) {
+  return profile?.role === 'admin'
+}
+
+export function AccountMenu({
+  profile,
+  onSignOut,
+  onAccount,
+  onSwitchWorkplace,
+  onAdministration,
+  currentWorkplace,
+}) {
   const [open, setOpen] = useState(false)
   const [theme, setTheme] = useState(readTheme)
   const [timezone, setTimezone] = useState(readTimezone)
   const [tzOpen, setTzOpen] = useState(false)
+  const [workplaceOpen, setWorkplaceOpen] = useState(false)
   const wrap = useRef(null)
+  const admin = isAdminProfile(profile)
 
   useEffect(() => {
     applyTheme(theme)
@@ -66,12 +85,14 @@ export function AccountMenu({ profile, onSignOut, onAccount }) {
       if (!wrap.current?.contains(event.target)) {
         setOpen(false)
         setTzOpen(false)
+        setWorkplaceOpen(false)
       }
     }
     const onKey = (event) => {
       if (event.key === 'Escape') {
         setOpen(false)
         setTzOpen(false)
+        setWorkplaceOpen(false)
       }
     }
     document.addEventListener('mousedown', onPointer)
@@ -124,6 +145,53 @@ export function AccountMenu({ profile, onSignOut, onAccount }) {
             >
               Account
             </button>
+            {admin && (
+              <>
+                <div className="account-timezone">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="account-timezone-btn"
+                    aria-expanded={workplaceOpen}
+                    onClick={() => {
+                      setTzOpen(false)
+                      setWorkplaceOpen((current) => !current)
+                    }}
+                  >
+                    <span>Switch Workplace</span>
+                    <span className="account-timezone-value">›</span>
+                  </button>
+                  {workplaceOpen && (
+                    <div className="account-timezone-menu">
+                      {WORKPLACES.map((item) => (
+                        <button
+                          key={item.value}
+                          type="button"
+                          className={currentWorkplace === item.value ? 'checked' : ''}
+                          onClick={() => {
+                            setOpen(false)
+                            setWorkplaceOpen(false)
+                            onSwitchWorkplace?.(item.value)
+                          }}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false)
+                    onAdministration?.()
+                  }}
+                >
+                  Administration
+                </button>
+              </>
+            )}
           </div>
           <div className="account-dropdown-section">
             <p className="account-section-label">Theme</p>
@@ -146,7 +214,10 @@ export function AccountMenu({ profile, onSignOut, onAccount }) {
                 role="menuitem"
                 className="account-timezone-btn"
                 aria-expanded={tzOpen}
-                onClick={() => setTzOpen((current) => !current)}
+                onClick={() => {
+                  setWorkplaceOpen(false)
+                  setTzOpen((current) => !current)
+                }}
               >
                 <span>Timezone</span>
                 <span className="account-timezone-value">{zoneLabel} ›</span>
@@ -215,7 +286,9 @@ export function AccountPage({ profile, onSaved, onBack, onSignOut }) {
     ? 'Sales'
     : profile?.role === 'coordinator'
       ? 'EDI Coordinator'
-      : 'EDI'
+      : profile?.role === 'admin'
+        ? 'Admin'
+        : 'EDI'
 
   return (
     <main className="page login-wrap">
@@ -246,6 +319,25 @@ export function AccountPage({ profile, onSaved, onBack, onSignOut }) {
           <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
         </div>
       </form>
+    </main>
+  )
+}
+
+export function AdministrationPage({ onBack }) {
+  return (
+    <main className="page edi-page">
+      <div className="dash-top">
+        <div>
+          <h2 className="dash-title">Administration</h2>
+          <p className="intro">Admin tools will appear here.</p>
+        </div>
+        <div className="actions">
+          <button type="button" className="secondary" onClick={onBack}>Back</button>
+        </div>
+      </div>
+      <section className="card">
+        <p className="intro">This page is empty for now.</p>
+      </section>
     </main>
   )
 }

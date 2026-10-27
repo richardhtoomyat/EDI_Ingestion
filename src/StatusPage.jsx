@@ -67,6 +67,9 @@ export default function StatusPage({
   profile,
   onSignOut,
   onAccount,
+  onSwitchWorkplace,
+  onAdministration,
+  currentWorkplace,
   normal,
   exception,
   normalCodes = {},
@@ -90,6 +93,9 @@ export default function StatusPage({
       profile={profile}
       onSignOut={onSignOut}
       onAccount={onAccount}
+      onSwitchWorkplace={onSwitchWorkplace}
+      onAdministration={onAdministration}
+      currentWorkplace={currentWorkplace}
     >
       <main className="page">
         <section className="card">

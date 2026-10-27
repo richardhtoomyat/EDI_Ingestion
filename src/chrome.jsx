@@ -3,7 +3,17 @@ import { AccountMenu } from './AccountMenu.jsx'
 
 export const EDI_EMAIL = 'edirequest@dayandrossinc.ca'
 
-export function SiteHeader({ title = 'EDI Customer Onboarding', subtitle, onSignOut, profile, onAccount, nav }) {
+export function SiteHeader({
+  title = 'EDI Customer Onboarding',
+  subtitle,
+  onSignOut,
+  profile,
+  onAccount,
+  onSwitchWorkplace,
+  onAdministration,
+  currentWorkplace,
+  nav,
+}) {
   return (
     <header className="site-header no-print">
       <div className="site-header-inner">
@@ -14,7 +24,14 @@ export function SiteHeader({ title = 'EDI Customer Onboarding', subtitle, onSign
         </div>
         {nav && <div className="site-header-nav">{nav}</div>}
         {profile && onSignOut ? (
-          <AccountMenu profile={profile} onSignOut={onSignOut} onAccount={onAccount} />
+          <AccountMenu
+            profile={profile}
+            onSignOut={onSignOut}
+            onAccount={onAccount}
+            onSwitchWorkplace={onSwitchWorkplace}
+            onAdministration={onAdministration}
+            currentWorkplace={currentWorkplace}
+          />
         ) : onSignOut ? (
           <button type="button" className="secondary header-signout" onClick={onSignOut}>
             Sign out
@@ -34,7 +51,18 @@ export function SiteFooter() {
   )
 }
 
-export function Shell({ title, subtitle, onSignOut, profile, onAccount, nav, children }) {
+export function Shell({
+  title,
+  subtitle,
+  onSignOut,
+  profile,
+  onAccount,
+  onSwitchWorkplace,
+  onAdministration,
+  currentWorkplace,
+  nav,
+  children,
+}) {
   return (
     <div className="app-shell">
       <SiteHeader
@@ -43,6 +71,9 @@ export function Shell({ title, subtitle, onSignOut, profile, onAccount, nav, chi
         onSignOut={onSignOut}
         profile={profile}
         onAccount={onAccount}
+        onSwitchWorkplace={onSwitchWorkplace}
+        onAdministration={onAdministration}
+        currentWorkplace={currentWorkplace}
         nav={nav}
       />
       <div className="app-shell-body">{children}</div>
