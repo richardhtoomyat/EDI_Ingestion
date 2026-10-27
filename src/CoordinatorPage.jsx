@@ -56,7 +56,7 @@ export default function CoordinatorPage({ profile, onSignOut }) {
   }
 
   return (
-    <Shell title="EDI Coordinator">
+    <Shell title="EDI Coordinator" onSignOut={onSignOut}>
       <main className="page edi-page">
         {welcome && <p className="welcome-line">Welcome, {welcome}</p>}
         <div className="dash-top">
@@ -66,7 +66,6 @@ export default function CoordinatorPage({ profile, onSignOut }) {
           </div>
           <div className="actions">
             <button type="button" className="secondary" onClick={() => refresh().catch((err) => setError(err.message))} disabled={busy}>Refresh</button>
-            {onSignOut && <button type="button" className="secondary" onClick={onSignOut}>Sign out</button>}
           </div>
         </div>
         {error && <div className="banner err" role="alert">{error}</div>}

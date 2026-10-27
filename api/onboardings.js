@@ -115,6 +115,20 @@ function agentName(draft = {}, profile) {
   return [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim() || '—'
 }
 
+function teamLabel(role) {
+  if (role === 'edi') return 'EDI'
+  if (role === 'coordinator') return 'Coordinator'
+  return 'Sales'
+}
+
+function lastModifiedFields(profile) {
+  const name = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim()
+  return {
+    last_modified_by_name: name || profile?.email || '',
+    last_modified_by_team: teamLabel(profile?.role),
+  }
+}
+
 function technowId(value) {
   return String(value || '').trim()
 }
@@ -157,6 +171,7 @@ function toRecord(row) {
     companyName: row.company_name,
     customerEmail: row.customer_email,
     draft: withTrader(draft, trader),
+    submission: row.submission && typeof row.submission === 'object' ? row.submission : null,
     traderIdQa: trader.traderIdQa,
     traderIdProd: trader.traderIdProd,
     agentName: agentName(draft),
@@ -164,6 +179,8 @@ function toRecord(row) {
     needsAt7Mapping: Boolean(row.needs_at7_mapping),
     at7CustomCount: Number(row.at7_custom_count) || 0,
     at7Codes,
+    lastModifiedByName: row.last_modified_by_name || '',
+    lastModifiedByTeam: row.last_modified_by_team || '',
   }
 }
 
@@ -280,6 +297,7 @@ export default async function handler(req, res) {
         prefill,
         trader_id_qa: '',
         trader_id_prod: '',
+        ...lastModifiedFields(profile),
       }
       try {
         const rows = await supabase(TABLE, { method: 'POST', body })
@@ -298,7 +316,7 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ ok: false, error: 'Missing onboarding id' })
 
       if (traderIdQa !== undefined || traderIdProd !== undefined) {
-        await requireRole(req, ['coordinator'])
+        const { profile } = await requireRole(req, ['coordinator'])
         const existing = await loadOnboarding(id)
         const current = pickTrader({ ...(existing.prefill || {}), trader_id_qa: existing.trader_id_qa, trader_id_prod: existing.trader_id_prod })
         const nextTrader = {
@@ -312,13 +330,14 @@ export default async function handler(req, res) {
             prefill,
             trader_id_qa: nextTrader.traderIdQa,
             trader_id_prod: nextTrader.traderIdProd,
+            ...lastModifiedFields(profile),
             updated_at: new Date().toISOString(),
           },
         })
         return res.status(200).json({ ok: true, record: toRecord({ ...rows[0], onboarding_at7_code: existing.onboarding_at7_code }) })
       }
 
-      await requireRole(req, ['sale'])
+      const { profile } = await requireRole(req, ['sale', 'edi'])
       if (!draft) return res.status(400).json({ ok: false, error: 'Missing onboarding' })
       const email = String(draft.customerEmail || '').trim()
       const technowRequestId = technowId(draft.technowRequestId)
@@ -338,6 +357,7 @@ export default async function handler(req, res) {
             prefill,
             trader_id_qa: trader.traderIdQa,
             trader_id_prod: trader.traderIdProd,
+            ...lastModifiedFields(profile),
             updated_at: new Date().toISOString(),
           },
         })

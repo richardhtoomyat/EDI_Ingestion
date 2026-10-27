@@ -79,13 +79,12 @@ function Dashboard({ profile, records, error, onCreate, onView, onSignOut }) {
     })
 
   return (
-    <Shell title="EDI Sales Agent">
+    <Shell title="EDI Sales Agent" onSignOut={onSignOut}>
       <main className="page">
         {welcome && <p className="welcome-line">Welcome, {welcome}</p>}
         <div className="dash-top">
           <h2 className="dash-title">Onboardings</h2>
           <div className="actions">
-            <button type="button" className="secondary" onClick={onSignOut}>Sign out</button>
             <button type="button" onClick={onCreate}>New onboarding <Chevron /></button>
           </div>
         </div>
@@ -126,7 +125,7 @@ function Dashboard({ profile, records, error, onCreate, onView, onSignOut }) {
   )
 }
 
-function CreateOnboarding({ profile, record, onCancel, onCreated }) {
+export function CreateOnboarding({ profile, record, onCancel, onCreated }) {
   const [draft, setDraft] = useState(() => {
     const base = record ? structuredClone(record.draft) : emptyDraft()
     return {
@@ -750,9 +749,18 @@ function AgentReview({ draft, error, busy, isEdit, onBack, onCreate }) {
   )
 }
 
+function lastModifiedLabel(record) {
+  const name = String(record?.lastModifiedByName || '').trim()
+  const team = String(record?.lastModifiedByTeam || '').trim()
+  if (!name && !team) return ''
+  if (name && team) return `${name} (${team})`
+  return name || team
+}
+
 function Created({ record, draft, onDone }) {
   const company = draft?.mainAccount?.companyName || record.companyName || 'Customer'
   const sets = (draft?.sets || []).join(', ') || '—'
+  const modifiedBy = lastModifiedLabel(record)
   const mailBody = [
     `EDI Sales Onboarding (${draft?.type || 'New'})`,
     `Form ID: ${record.id}`,
@@ -768,6 +776,7 @@ function Created({ record, draft, onDone }) {
       ? `214 exception statuses: ${statusCodeText(draft.exceptionStatuses, EXCEPTION_STATUSES, draft.exceptionCodes).replaceAll('\n', ', ')}`
       : '',
     `Completed by: ${draft?.authorization?.name || '—'}`,
+    modifiedBy ? `Last modified by: ${modifiedBy}` : '',
   ].filter(Boolean).join('\n')
 
   return (
@@ -777,6 +786,7 @@ function Created({ record, draft, onDone }) {
         <section className="card no-print">
           <h2>Created</h2>
           <p className="intro">Form ID: {record.id}</p>
+          {modifiedBy && <p className="intro">Last modified by: {modifiedBy}</p>}
           <CopyFormIdButton id={record.id} />
         </section>
         <div className="print-only">

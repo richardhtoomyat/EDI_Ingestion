@@ -16,6 +16,8 @@ create table public.onboarding (
   trader_id_prod text not null default '',
   needs_at7_mapping boolean not null default false,
   at7_custom_count integer not null default 0,
+  last_modified_by_name text not null default '',
+  last_modified_by_team text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -62,4 +64,6 @@ comment on column public.onboarding.trader_id_qa is 'Trader ID (QA) set by EDI C
 comment on column public.onboarding.trader_id_prod is 'Trader ID (Prod) set by EDI Coordinator';
 comment on column public.onboarding.needs_at7_mapping is 'True when authoritative 214 statuses include customized AT7-01/AT7-02';
 comment on column public.onboarding.at7_custom_count is 'Count of customized AT7 rows for the authoritative source';
+comment on column public.onboarding.last_modified_by_name is 'First and last name of the last person who saved the form';
+comment on column public.onboarding.last_modified_by_team is 'Team label: Sales, EDI, or Coordinator';
 comment on table public.onboarding_at7_code is 'Normalized 214 status AT7 codes per onboarding; is_custom flags EDI mapping work';

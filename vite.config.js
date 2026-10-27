@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import handler from './api/test-sftp.js'
 import onboardings from './api/onboardings.js'
+import profiles from './api/profiles.js'
 
 if (!process.env.SFTP_HOST) process.env.SFTP_HOST = '127.0.0.1'
 
@@ -45,6 +46,7 @@ function sftpDevApi() {
     configureServer(server) {
       server.middlewares.use('/api/test-sftp', devApi('/api/test-sftp', handler, ['POST']))
       server.middlewares.use('/api/onboardings', devApi('/api/onboardings', onboardings))
+      server.middlewares.use('/api/profiles', devApi('/api/profiles', profiles, ['GET']))
     },
   }
 }

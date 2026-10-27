@@ -135,6 +135,7 @@ export function onboardingUrl(record) {
 export function customerRoute() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   if (path === '/dev/sale') return { kind: 'salePreview' }
+  if (path === '/dev/edi') return { kind: 'ediPreview' }
   if (path === '/' || path === '/edi' || path === '/coordinator') return { kind: 'agent' }
   if (path.startsWith('/c/')) {
     const token = decodeURIComponent(path.slice(3))
@@ -174,6 +175,13 @@ export async function loadOnboardings() {
     throw error
   }
   return payload.records || []
+}
+
+export async function loadEdiTeam() {
+  const response = await fetch('/api/profiles?role=edi', { headers: await authHeaders() })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || 'Could not load EDI team')
+  return payload.profiles || []
 }
 
 async function sendOnboarding(path, method, body) {
