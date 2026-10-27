@@ -24,7 +24,7 @@ body { margin: 0; background: #fff; font-size: 16px; line-height: 1.5; -webkit-f
 }
 .app-shell-body { flex: 1 0 auto; width: 100%; }
 .site-header { background: #fff; border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.site-header-inner { max-width: 1100px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 20px; }
+.site-header-inner { width: 100%; max-width: none; margin: 0; padding: 12px 24px; display: flex; align-items: center; gap: 20px; }
 .site-title { flex: 1; min-width: 0; }
 button.header-signout,
 button.header-signout:hover,
@@ -417,7 +417,13 @@ fieldset.locked-fields textarea,
 fieldset.locked-fields .field span,
 fieldset.locked-fields legend,
 fieldset.locked-fields .inline { color: #6b6e73; }
-.edi-page { max-width: 1100px; }
+.edi-page {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 24px 24px 56px;
+  box-sizing: border-box;
+}
 .edi-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .edi-stats div { background: #fff; border: 1px solid var(--line); border-top: 3px solid var(--black); padding: 14px 16px; }
 .edi-stats b { display: block; font-size: 1.6rem; line-height: 1.1; }
