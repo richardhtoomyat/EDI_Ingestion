@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { DEVELOPER_FIELDS, NORMAL_STATUSES, EXCEPTION_STATUSES, SERVICES, SFTP_FIELDS, TRANSACTION_SETS } from './formConfig.js'
 import { Shell, Chevron, EDI_EMAIL } from './chrome.jsx'
 import {
-  emptyAuthorization, emptyCustomerDetails, emptyDeveloper, emptyDraft, loadOnboardings, onboardingUrl, padAs400, saveOnboarding, traderLabel, updateOnboarding,
+  emptyAuthorization, emptyCustomerDetails, emptyDeveloper, emptyDraft, loadOnboardings, padAs400, saveOnboarding, traderLabel, updateOnboarding,
 } from './onboardingLink.js'
 import AddressField from './AddressField.jsx'
 import RegionField from './RegionField.jsx'
@@ -42,14 +42,15 @@ function agentAuthLocks(profile) {
   }
 }
 
-function CopyLink({ url }) {
+function CopyFormIdButton({ id }) {
   const [copied, setCopied] = useState(false)
   const copy = async () => {
+    const value = String(id || '')
     try {
-      await navigator.clipboard.writeText(url)
+      await navigator.clipboard.writeText(value)
     } catch {
       const input = document.createElement('input')
-      input.value = url
+      input.value = value
       document.body.appendChild(input)
       input.select()
       document.execCommand('copy')
@@ -58,35 +59,25 @@ function CopyLink({ url }) {
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
-  return (
-    <div className="link-row">
-      <input readOnly value={url} aria-label="Customer link" onFocus={(e) => e.target.select()} />
-      <button type="button" className="secondary" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
-    </div>
-  )
-}
-
-function CopyLinkButton({ url }) {
-  const [copied, setCopied] = useState(false)
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url)
-    } catch {
-      const input = document.createElement('input')
-      input.value = url
-      document.body.appendChild(input)
-      input.select()
-      document.execCommand('copy')
-      input.remove()
-    }
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-  return <button type="button" className="secondary" onClick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
+  return <button type="button" className="secondary" onClick={copy}>{copied ? 'Copied' : 'Copy form ID'}</button>
 }
 
 function Dashboard({ profile, records, error, onCreate, onView, onSignOut }) {
+  const [query, setQuery] = useState('')
   const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
+  const needle = query.trim().toLowerCase()
+  const filtered = !needle
+    ? records
+    : records.filter((record) => {
+      const haystack = [
+        record.id,
+        record.companyName,
+        record.customerEmail,
+        record.technowRequestId,
+      ].map((value) => String(value || '').toLowerCase()).join(' ')
+      return haystack.includes(needle)
+    })
+
   return (
     <Shell title="EDI Sales Agent">
       <main className="page">
@@ -99,19 +90,31 @@ function Dashboard({ profile, records, error, onCreate, onView, onSignOut }) {
           </div>
         </div>
         {error && <div className="banner err" role="alert">{error}</div>}
+        <label className="field dash-search">
+          <span>Search by form ID</span>
+          <input
+            value={query}
+            placeholder="Paste UUID or search company / email"
+            onChange={(event) => setQuery(event.target.value)}
+            autoComplete="off"
+          />
+        </label>
         {records.length === 0 ? (
-          <section className="card"><p className="intro">No onboardings yet. Create one to get a link for the customer.</p></section>
+          <section className="card"><p className="intro">No onboardings yet. Create one to get started.</p></section>
+        ) : filtered.length === 0 ? (
+          <section className="card"><p className="intro">No onboardings match that form ID.</p></section>
         ) : (
           <div className="onboard-list">
-            {records.map((record) => (
+            {filtered.map((record) => (
               <section key={record.id} className="card onboard-item">
                 <div>
                   <strong>{record.companyName}</strong>
                   <div className="intro">{record.customerEmail}</div>
                   <div className="intro">{new Date(record.createdAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                  <div className="intro form-id">{record.id}</div>
                 </div>
                 <div className="row-actions">
-                  <CopyLinkButton url={onboardingUrl(record)} />
+                  <CopyFormIdButton id={record.id} />
                   <button type="button" className="secondary" onClick={() => onView(record)}>View form</button>
                 </div>
               </section>
@@ -664,7 +667,7 @@ function CreateOnboarding({ profile, record, onCancel, onCreated }) {
   )
 }
 
-function AgentReview({ draft, error, busy, isEdit, onBack, onCreate }) {
+function ReviewSummary({ draft }) {
   const details = { ...emptyCustomerDetails(), ...(draft.customerDetails || {}) }
   const tech = { ...emptyDeveloper(), ...(draft.developer || {}) }
   const auth = { ...emptyAuthorization(), ...(draft.authorization || {}) }
@@ -675,59 +678,67 @@ function AgentReview({ draft, error, busy, isEdit, onBack, onCreate }) {
   const row = (label, value) => <tr key={label}><th>{label}</th><td>{value || '—'}</td></tr>
 
   return (
+    <>
+      <section className="card"><h2>Request</h2><table><tbody>
+        {row('Customer email', draft.customerEmail)}
+        {row('Technow Request ID', draft.technowRequestId)}
+        {row('Type', draft.type)}
+        {row('Service', services)}
+      </tbody></table></section>
+      <section className="card"><h2>Customer details</h2><table><tbody>
+        {row('Company Name', details.companyName)}
+        {row('Address', details.address)}
+        {row('City', details.city)}
+        {row('Prov/State', details.region)}
+        {row('Postal/Zip', details.postal)}
+        {row('Business Contact Name', details.businessContactName)}
+        {row('Business Contact Phone', details.businessContactPhone)}
+        {row('Business Contact Email', details.businessContactEmail)}
+        {row('AS400 Account Number', details.as400AccountNumber)}
+        {row('Truckmate ID', details.truckmateId)}
+        {row('Oracle ID', details.oracleId)}
+      </tbody></table></section>
+      <section className="card"><h2>Technical Contact</h2><table><tbody>
+        {DEVELOPER_FIELDS.filter((field) => field.name !== 'title').map((field) => row(field.label, tech[field.name]))}
+      </tbody></table></section>
+      <section className="card"><h2>Transaction Sets</h2><table><tbody>
+        {row('Transaction sets', sets)}
+        {wants214(draft) && (draft.normalStatuses || []).length
+          ? row('214 normal statuses', statusCodeText(draft.normalStatuses, NORMAL_STATUSES, draft.normalCodes))
+          : null}
+        {wants214(draft) && (draft.exceptionStatuses || []).length
+          ? row('214 exception statuses', statusCodeText(draft.exceptionStatuses, EXCEPTION_STATUSES, draft.exceptionCodes))
+          : null}
+      </tbody></table></section>
+      {draft.type !== 'Revised' && (
+        <section className="card"><h2>EDI Communication</h2><table><tbody>
+          {row('Hosting', draft.hosting === 'dayross' ? 'Day & Ross' : draft.hosting === 'customer' ? 'Customer' : '—')}
+          {draft.hosting === 'customer' && row('Method', [draft.as2 && 'AS2', draft.sftp && 'SFTP'].filter(Boolean).join(', ') || '—')}
+          {draft.hosting === 'customer' && draft.as2 && row('AS2 certificate', draft.as2Certificate?.name || '—')}
+          {draft.hosting === 'customer' && draft.sftp && SFTP_FIELDS.map((field) => (
+            row(field.label, field.name === 'password' ? '••••••••' : draft.sftpDetails?.[field.name])
+          ))}
+        </tbody></table></section>
+      )}
+      <section className="card"><h2>Authorization</h2><table><tbody>
+        {row('Completed by', auth.name)}
+        {row('Title', auth.title)}
+        {row('Company', auth.company)}
+        {row('Payment house authorized for API/EDI & other services', auth.paymentHouseAuth)}
+        {row('Comments', auth.comments)}
+        {row('Date', auth.date)}
+      </tbody></table></section>
+    </>
+  )
+}
+
+function AgentReview({ draft, error, busy, isEdit, onBack, onCreate }) {
+  return (
     <Shell title="EDI Sales Agent">
       <main className="page">
         <div className="banner ok no-print">Review the onboarding details, then create it.</div>
         {error && <div className="banner err" role="alert">{error}</div>}
-        <section className="card"><h2>Request</h2><table><tbody>
-          {row('Customer email', draft.customerEmail)}
-          {row('Technow Request ID', draft.technowRequestId)}
-          {row('Type', draft.type)}
-          {row('Service', services)}
-        </tbody></table></section>
-        <section className="card"><h2>Customer details</h2><table><tbody>
-          {row('Company Name', details.companyName)}
-          {row('Address', details.address)}
-          {row('City', details.city)}
-          {row('Prov/State', details.region)}
-          {row('Postal/Zip', details.postal)}
-          {row('Business Contact Name', details.businessContactName)}
-          {row('Business Contact Phone', details.businessContactPhone)}
-          {row('Business Contact Email', details.businessContactEmail)}
-          {row('AS400 Account Number', details.as400AccountNumber)}
-          {row('Truckmate ID', details.truckmateId)}
-          {row('Oracle ID', details.oracleId)}
-        </tbody></table></section>
-        <section className="card"><h2>Technical Contact</h2><table><tbody>
-          {DEVELOPER_FIELDS.filter((field) => field.name !== 'title').map((field) => row(field.label, tech[field.name]))}
-        </tbody></table></section>
-        <section className="card"><h2>Transaction Sets</h2><table><tbody>
-          {row('Transaction sets', sets)}
-          {wants214(draft) && (draft.normalStatuses || []).length
-            ? row('214 normal statuses', statusCodeText(draft.normalStatuses, NORMAL_STATUSES, draft.normalCodes))
-            : null}
-          {wants214(draft) && (draft.exceptionStatuses || []).length
-            ? row('214 exception statuses', statusCodeText(draft.exceptionStatuses, EXCEPTION_STATUSES, draft.exceptionCodes))
-            : null}
-        </tbody></table></section>
-        {draft.type !== 'Revised' && (
-          <section className="card"><h2>EDI Communication</h2><table><tbody>
-            {row('Hosting', draft.hosting === 'dayross' ? 'Day & Ross' : draft.hosting === 'customer' ? 'Customer' : '—')}
-            {draft.hosting === 'customer' && row('Method', [draft.as2 && 'AS2', draft.sftp && 'SFTP'].filter(Boolean).join(', ') || '—')}
-            {draft.hosting === 'customer' && draft.as2 && row('AS2 certificate', draft.as2Certificate?.name || '—')}
-            {draft.hosting === 'customer' && draft.sftp && SFTP_FIELDS.map((field) => (
-              row(field.label, field.name === 'password' ? '••••••••' : draft.sftpDetails?.[field.name])
-            ))}
-          </tbody></table></section>
-        )}
-        <section className="card"><h2>Authorization</h2><table><tbody>
-          {row('Completed by', auth.name)}
-          {row('Title', auth.title)}
-          {row('Company', auth.company)}
-          {row('Payment house authorized for API/EDI & other services', auth.paymentHouseAuth)}
-          {row('Comments', auth.comments)}
-          {row('Date', auth.date)}
-        </tbody></table></section>
+        <ReviewSummary draft={draft} />
         <div className="actions no-print">
           <button type="button" className="secondary" onClick={onBack} disabled={busy}>Back</button>
           <button type="button" onClick={onCreate} disabled={busy}>
@@ -741,11 +752,10 @@ function AgentReview({ draft, error, busy, isEdit, onBack, onCreate }) {
 
 function Created({ record, draft, onDone }) {
   const company = draft?.mainAccount?.companyName || record.companyName || 'Customer'
-  const sets = TRANSACTION_SETS.filter((item) => (draft?.sets || []).includes(item.code))
-    .map((item) => `${item.code} ${item.name}`)
-    .join(', ') || '—'
+  const sets = (draft?.sets || []).join(', ') || '—'
   const mailBody = [
     `EDI Sales Onboarding (${draft?.type || 'New'})`,
+    `Form ID: ${record.id}`,
     `Technow Request ID: ${draft?.technowRequestId || '—'}`,
     `Customer: ${company}`,
     `Customer email: ${record.customerEmail}`,
@@ -758,18 +768,20 @@ function Created({ record, draft, onDone }) {
       ? `214 exception statuses: ${statusCodeText(draft.exceptionStatuses, EXCEPTION_STATUSES, draft.exceptionCodes).replaceAll('\n', ', ')}`
       : '',
     `Completed by: ${draft?.authorization?.name || '—'}`,
-    `Customer link: ${onboardingUrl(record)}`,
   ].filter(Boolean).join('\n')
 
   return (
     <Shell title="EDI Sales Agent">
       <main className="page">
-        <div className="banner ok">Created</div>
-        <section className="card">
+        <div className="banner ok no-print">Created</div>
+        <section className="card no-print">
           <h2>Created</h2>
-          <p className="intro">Send this link to {record.customerEmail}. It opens their form with the details you entered.</p>
-          <CopyLink url={onboardingUrl(record)} />
+          <p className="intro">Form ID: {record.id}</p>
+          <CopyFormIdButton id={record.id} />
         </section>
+        <div className="print-only">
+          <ReviewSummary draft={draft} />
+        </div>
         <div className="actions no-print">
           <button type="button" onClick={() => window.print()}>Save as PDF <Chevron /></button>
           <a
