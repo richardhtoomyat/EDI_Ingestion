@@ -28,7 +28,13 @@ export function SiteFooter() {
 }
 
 export function Shell({ title, onSignOut, children }) {
-  return (<><SiteHeader title={title} onSignOut={onSignOut} />{children}<SiteFooter /></>)
+  return (
+    <div className="app-shell">
+      <SiteHeader title={title} onSignOut={onSignOut} />
+      <div className="app-shell-body">{children}</div>
+      <SiteFooter />
+    </div>
+  )
 }
 
 export const Chevron = () => <span className="chev" aria-hidden="true">›</span>
