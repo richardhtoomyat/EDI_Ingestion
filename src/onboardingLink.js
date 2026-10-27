@@ -208,11 +208,13 @@ export function updateTraderIds(id, { traderIdQa, traderIdProd }) {
   return sendOnboarding('/api/onboardings', 'PATCH', { id, traderIdQa, traderIdProd })
 }
 
-export function updateEdiAssignment(id, { ediOwnerId, ediNote, completed }) {
+export function updateEdiAssignment(id, { ediOwnerId, ediNote, completed, ediStage, estimatedCompletionDate }) {
   const body = { id }
   if (ediOwnerId !== undefined) body.ediOwnerId = ediOwnerId
   if (ediNote !== undefined) body.ediNote = ediNote
   if (completed !== undefined) body.completed = completed
+  if (ediStage !== undefined) body.ediStage = ediStage
+  if (estimatedCompletionDate !== undefined) body.estimatedCompletionDate = estimatedCompletionDate
   return sendOnboarding('/api/onboardings', 'PATCH', body)
 }
 

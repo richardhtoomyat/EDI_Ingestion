@@ -183,8 +183,13 @@ function toRecord(row) {
     lastModifiedByTeam: row.last_modified_by_team || '',
     ediOwnerId: row.edi_owner_id || '',
     ediNote: row.edi_note || '',
+    ediStage: row.edi_stage || '',
+    estimatedCompletionDate: row.estimated_completion_date || '',
     readyAt: row.ready_at ? new Date(row.ready_at).getTime() : null,
     assignedAt: row.assigned_at ? new Date(row.assigned_at).getTime() : null,
+    startedAt: row.started_at ? new Date(row.started_at).getTime() : null,
+    testAt: row.test_at ? new Date(row.test_at).getTime() : null,
+    productionAt: row.production_at ? new Date(row.production_at).getTime() : null,
     completedAt: row.completed_at ? new Date(row.completed_at).getTime() : null,
   }
 }
@@ -351,11 +356,19 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PATCH') {
-      const { id, draft, traderIdQa, traderIdProd, ediOwnerId, ediNote, completed } = req.body || {}
+      const {
+        id, draft, traderIdQa, traderIdProd, ediOwnerId, ediNote, completed, ediStage, estimatedCompletionDate,
+      } = req.body || {}
       if (!id) return res.status(400).json({ ok: false, error: 'Missing onboarding id' })
 
-      if (ediOwnerId !== undefined || ediNote !== undefined || completed !== undefined) {
-        const { profile } = await requireRole(req, ['edi'])
+      if (
+        ediOwnerId !== undefined
+        || ediNote !== undefined
+        || completed !== undefined
+        || ediStage !== undefined
+        || estimatedCompletionDate !== undefined
+      ) {
+        const { profile, user } = await requireRole(req, ['edi'])
         const existing = await loadOnboarding(id)
         const body = {
           ...lastModifiedFields(profile),
@@ -368,10 +381,55 @@ export default async function handler(req, res) {
           if (nextOwner && !existing.assigned_at) body.assigned_at = new Date().toISOString()
         }
         if (ediNote !== undefined) body.edi_note = String(ediNote || '')
-        if (completed !== undefined) {
+        if (ediStage !== undefined) {
+          const stage = String(ediStage || '').trim()
+          if (!['', 'started', 'test', 'production'].includes(stage)) {
+            return res.status(400).json({ ok: false, error: 'Invalid EDI stage' })
+          }
+          const now = new Date().toISOString()
+          body.edi_stage = stage
+          if (stage === 'started') {
+            const estimate = String(estimatedCompletionDate || existing.estimated_completion_date || '').trim()
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(estimate)) {
+              return res.status(400).json({ ok: false, error: 'Estimated completion date is required (YYYY-MM-DD)' })
+            }
+            body.estimated_completion_date = estimate
+            body.started_at = existing.started_at || now
+            body.completed_at = null
+            if (!existing.edi_owner_id && user?.id) {
+              body.edi_owner_id = user.id
+              if (!existing.assigned_at) body.assigned_at = now
+            }
+          } else if (stage === 'test') {
+            body.test_at = existing.test_at || now
+            body.completed_at = null
+            if (estimatedCompletionDate !== undefined) {
+              const estimate = String(estimatedCompletionDate || '').trim()
+              if (estimate && !/^\d{4}-\d{2}-\d{2}$/.test(estimate)) {
+                return res.status(400).json({ ok: false, error: 'Estimated completion date must be YYYY-MM-DD' })
+              }
+              if (estimate) body.estimated_completion_date = estimate
+            }
+          } else if (stage === 'production') {
+            body.production_at = existing.production_at || now
+            body.completed_at = existing.completed_at || now
+          } else {
+            body.completed_at = null
+          }
+        } else if (estimatedCompletionDate !== undefined) {
+          const estimate = String(estimatedCompletionDate || '').trim()
+          if (estimate && !/^\d{4}-\d{2}-\d{2}$/.test(estimate)) {
+            return res.status(400).json({ ok: false, error: 'Estimated completion date must be YYYY-MM-DD' })
+          }
+          body.estimated_completion_date = estimate || null
+        }
+        if (completed !== undefined && ediStage === undefined) {
           if (completed) {
+            body.edi_stage = existing.edi_stage === 'production' ? 'production' : 'production'
+            body.production_at = existing.production_at || new Date().toISOString()
             body.completed_at = existing.completed_at || new Date().toISOString()
           } else {
+            body.edi_stage = existing.edi_stage === 'production' ? 'test' : (existing.edi_stage || '')
             body.completed_at = null
           }
         }
@@ -455,11 +513,11 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   } catch (error) {
-    const missing = error.code === 'PGRST205' || /onboarding|profiles|needs_at7|at7_|edi_owner|ready_at|completed_at/i.test(error.message || '')
+    const missing = error.code === 'PGRST205' || /onboarding|profiles|needs_at7|at7_|edi_owner|edi_stage|ready_at|completed_at|estimated_completion/i.test(error.message || '')
     return res.status(missing && error.status !== 401 && error.status !== 403 && error.status !== 404 ? 503 : error.status || 500).json({
       ok: false,
       error: missing && error.status !== 401 && error.status !== 403 && error.status !== 404
-        ? 'Onboarding tables/columns are missing. Run supabase/onboarding.sql (or supabase/onboarding_edi_kpi.sql on an existing DB) in the Supabase SQL editor.'
+        ? 'Onboarding tables/columns are missing. Run supabase/onboarding.sql (or supabase/onboarding_edi_stages.sql on an existing DB) in the Supabase SQL editor.'
         : error.message,
     })
   }

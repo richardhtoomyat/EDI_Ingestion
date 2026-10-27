@@ -20,8 +20,13 @@ create table public.onboarding (
   last_modified_by_team text not null default '',
   edi_owner_id uuid references public.profiles (id) on delete set null,
   edi_note text not null default '',
+  edi_stage text not null default '' check (edi_stage in ('', 'started', 'test', 'production')),
+  estimated_completion_date date,
   ready_at timestamptz,
   assigned_at timestamptz,
+  started_at timestamptz,
+  test_at timestamptz,
+  production_at timestamptz,
   completed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -33,6 +38,7 @@ create index if not exists onboarding_needs_at7_mapping_idx
   on public.onboarding (needs_at7_mapping)
   where needs_at7_mapping = true;
 create index if not exists onboarding_edi_owner_id_idx on public.onboarding (edi_owner_id);
+create index if not exists onboarding_edi_stage_idx on public.onboarding (edi_stage);
 create index if not exists onboarding_ready_at_idx on public.onboarding (ready_at);
 create index if not exists onboarding_completed_at_idx on public.onboarding (completed_at);
 

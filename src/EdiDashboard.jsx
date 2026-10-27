@@ -7,10 +7,18 @@ import { emptyDeveloper, loadEdiTeam, loadOnboardings, updateEdiAssignment } fro
 const STATUSES = [
   { value: 'all', label: 'All statuses' },
   { value: 'pending-customer', label: 'Pending customer' },
-  { value: 'pending-coordinator', label: 'Pending coordinator' },
+  { value: 'pending', label: 'Pending' },
   { value: 'ready', label: 'Ready' },
   { value: 'assigned', label: 'Assigned' },
-  { value: 'completed', label: 'Completed' },
+  { value: 'started', label: 'Started' },
+  { value: 'test', label: 'Test' },
+  { value: 'production', label: 'Production' },
+]
+
+const EDI_STAGES = [
+  { value: 'started', label: 'Started' },
+  { value: 'test', label: 'Test' },
+  { value: 'production', label: 'Production' },
 ]
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -61,11 +69,17 @@ function traderIdsComplete(record) {
 }
 
 function deriveStatus(record) {
-  if (record.completedAt) return 'completed'
+  if (record.ediStage === 'production' || record.completedAt) return 'production'
+  if (record.ediStage === 'test') return 'test'
+  if (record.ediStage === 'started') return 'started'
   if (record.ediOwnerId) return 'assigned'
   if (!techContactComplete(record)) return 'pending-customer'
-  if (!traderIdsComplete(record)) return 'pending-coordinator'
+  if (!traderIdsComplete(record)) return 'pending'
   return 'ready'
+}
+
+function isDoneStatus(status) {
+  return status === 'production'
 }
 
 function recordToItem(record) {
@@ -89,11 +103,16 @@ function recordToItem(record) {
     technicalMobile: tech.tel || '',
     mobileVerified: Boolean(tech.mobileVerified),
     ownerId: record.ediOwnerId || '',
-    completed: Boolean(record.completedAt),
+    ediStage: record.ediStage || '',
+    estimatedCompletionDate: record.estimatedCompletionDate || '',
+    completed: Boolean(record.completedAt) || record.ediStage === 'production',
     note: record.ediNote || '',
     readyAt: record.readyAt || null,
     assignedAt: record.assignedAt || null,
-    completedAt: record.completedAt || null,
+    startedAt: record.startedAt || null,
+    testAt: record.testAt || null,
+    productionAt: record.productionAt || null,
+    completedAt: record.completedAt || record.productionAt || null,
     traderIdQa: record.traderIdQa || '',
     traderIdProd: record.traderIdProd || '',
     needsAt7Mapping: Boolean(record.needsAt7Mapping),
@@ -111,7 +130,7 @@ function recordToItem(record) {
 function gaps(item) {
   const missing = []
   if (item.status === 'pending-customer') missing.push('Technical contact incomplete')
-  if (item.status === 'pending-coordinator') missing.push('Trader ID QA/Prod missing')
+  if (item.status === 'pending') missing.push('Trader ID QA/Prod missing')
   if (item.needsAt7Mapping) missing.push(item.at7CustomCount > 1 ? `Custom mapping (${item.at7CustomCount})` : 'Custom mapping')
   return missing
 }
@@ -383,6 +402,8 @@ export default function EdiDashboard({ profile, onSignOut }) {
   const [openId, setOpenId] = useState('')
   const [editing, setEditing] = useState(null)
   const [dragOver, setDragOver] = useState('')
+  const [stagePrompt, setStagePrompt] = useState(null)
+  const [estimateDraft, setEstimateDraft] = useState('')
   const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
 
   useEffect(() => {
@@ -408,8 +429,8 @@ export default function EdiDashboard({ profile, onSignOut }) {
   const items = useMemo(() => records.map(recordToItem), [records])
   const agents = [...new Set(items.map((item) => item.agent).filter(Boolean))].sort()
   const sortBoard = (list) => [...list].sort((a, b) => {
-    const aDone = a.status === 'completed' ? 1 : 0
-    const bDone = b.status === 'completed' ? 1 : 0
+    const aDone = isDoneStatus(a.status) ? 1 : 0
+    const bDone = isDoneStatus(b.status) ? 1 : 0
     if (aDone !== bDone) return aDone - bDone
     return (b.createdAt || 0) - (a.createdAt || 0)
   })
@@ -457,6 +478,31 @@ export default function EdiDashboard({ profile, onSignOut }) {
 
   const assign = (id, ownerId) => {
     persistEdi(id, { ediOwnerId: ownerId }).catch(() => {})
+  }
+
+  const requestStage = (item, stage) => {
+    if (stage === 'started') {
+      setEstimateDraft(item.estimatedCompletionDate || '')
+      setStagePrompt({ id: item.id, company: item.company, stage: 'started' })
+      return
+    }
+    persistEdi(item.id, { ediStage: stage }).catch(() => {})
+  }
+
+  const confirmStartStage = async () => {
+    if (!stagePrompt) return
+    const date = String(estimateDraft || '').trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      setSaveError('Enter an estimated completion date')
+      return
+    }
+    try {
+      await persistEdi(stagePrompt.id, { ediStage: 'started', estimatedCompletionDate: date })
+      setStagePrompt(null)
+      setEstimateDraft('')
+    } catch {
+      // saveError already set
+    }
   }
 
   const onDropOwner = (ownerId) => (event) => {
@@ -518,10 +564,10 @@ export default function EdiDashboard({ profile, onSignOut }) {
         {tab === 'board' && !loading && (
           <>
             <div className="edi-stats">
-              <div><b>{items.filter((item) => item.status !== 'completed').length}</b><span>Active</span></div>
-              <div><b>{items.filter((item) => item.status === 'assigned').length}</b><span>Assigned</span></div>
-              <div><b>{items.filter((item) => item.status === 'ready').length}</b><span>Ready</span></div>
-              <div><b>{items.filter((item) => item.status === 'completed').length}</b><span>Completed</span></div>
+              <div><b>{items.filter((item) => !isDoneStatus(item.status)).length}</b><span>Active</span></div>
+              <div><b>{items.filter((item) => item.status === 'started').length}</b><span>Started</span></div>
+              <div><b>{items.filter((item) => item.status === 'test').length}</b><span>Test</span></div>
+              <div><b>{items.filter((item) => item.status === 'production').length}</b><span>Production</span></div>
             </div>
             <section className="card">
               <div className="edi-filters">
@@ -601,7 +647,7 @@ export default function EdiDashboard({ profile, onSignOut }) {
             >
               <h3>Unassigned</h3>
               <p className="intro">Not in anyone's workbucket yet.</p>
-              {items.filter((item) => !item.ownerId && item.status !== 'completed').map((item) => (
+              {items.filter((item) => !item.ownerId && !isDoneStatus(item.status)).map((item) => (
                 <button key={item.id} type="button" className="bucket-card" draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', item.id)} onClick={() => setOpenId(item.id)}>
                   <strong>{item.company}</strong>
                   <span>{statusLabel(item.status, item, team)}</span>
@@ -656,6 +702,9 @@ export default function EdiDashboard({ profile, onSignOut }) {
               <p className="intro"><span>Mobile:</span> {open.technicalMobile}</p>
             </section>
             <p><span className={`edi-pill ${open.status}`}>{statusLabel(open.status, open, team)}</span></p>
+            {open.estimatedCompletionDate && (
+              <p className="intro">Estimated completion: {open.estimatedCompletionDate}</p>
+            )}
             {gaps(open).length > 0 && <div className="flag-row">{gaps(open).map((flag) => <span key={flag} className="edi-flag">{flag}</span>)}</div>}
             <p className="intro">Trader ID QA: {open.traderIdQa || '—'} · Trader ID Prod: {open.traderIdProd || '—'}</p>
             <h3>214 codes</h3>
@@ -705,28 +754,65 @@ export default function EdiDashboard({ profile, onSignOut }) {
                 }}
               />
             </label>
-            <div className="actions">
-              <button type="button" onClick={() => openRecord(open.id)}>View form</button>
-              {open.completed ? (
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={busyId === open.id}
-                  onClick={() => persistEdi(open.id, { completed: false }).catch(() => {})}
-                >
-                  Reopen
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busyId === open.id}
-                  onClick={() => persistEdi(open.id, { completed: true }).catch(() => {})}
-                >
-                  Mark completed
-                </button>
+            <div className="actions stage-actions">
+              <button type="button" className="secondary" onClick={() => openRecord(open.id)}>View form</button>
+              {(tab === 'mine' || open.ownerId === profile?.id) && (
+                <label className="stage-dropdown">
+                  <span className="visually-hidden">Update stage</span>
+                  <select
+                    value={open.ediStage || ''}
+                    disabled={busyId === open.id}
+                    onChange={(event) => {
+                      const next = event.target.value
+                      if (!next) return
+                      requestStage(open, next)
+                    }}
+                  >
+                    <option value="" disabled>{open.ediStage ? 'Change stage…' : 'Set stage…'}</option>
+                    {EDI_STAGES.map((stage) => (
+                      <option key={stage.value} value={stage.value}>{stage.label}</option>
+                    ))}
+                  </select>
+                </label>
               )}
             </div>
           </div>
+        </div>,
+        document.body,
+      )}
+      {stagePrompt && createPortal(
+        <div className="edi-detail stage-prompt" role="dialog" aria-modal="true" aria-label="Estimated completion date">
+          <button type="button" className="edi-scrim" aria-label="Close" onClick={() => setStagePrompt(null)} />
+          <form
+            className="edi-sheet stage-prompt-sheet"
+            onSubmit={(event) => {
+              event.preventDefault()
+              confirmStartStage()
+            }}
+          >
+            <div className="dash-top">
+              <div>
+                <h2>Start {stagePrompt.company}</h2>
+                <p className="intro">Enter the estimated completion date to move this onboarding to Started.</p>
+              </div>
+              <button type="button" className="secondary status-edit" onClick={() => setStagePrompt(null)}>Cancel</button>
+            </div>
+            <label className="field">
+              <span>Estimated completion date</span>
+              <input
+                type="date"
+                required
+                value={estimateDraft}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={(event) => setEstimateDraft(event.target.value)}
+              />
+            </label>
+            <div className="actions">
+              <button type="submit" disabled={busyId === stagePrompt.id}>
+                {busyId === stagePrompt.id ? 'Saving…' : 'Start'}
+              </button>
+            </div>
+          </form>
         </div>,
         document.body,
       )}

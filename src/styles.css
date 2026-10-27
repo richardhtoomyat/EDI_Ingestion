@@ -442,9 +442,13 @@ button.edi-tab.active, button.edi-tab.active:hover { background: var(--black); c
 .edi-table th:last-child { text-align: right; width: 5.5rem; }
 .edi-pill { display: inline-block; padding: 2px 8px; font-size: .75rem; font-weight: 600; background: var(--bg); }
 .edi-pill.pending-customer { background: #fff4ee; color: #c2410c; }
+.edi-pill.pending,
 .edi-pill.pending-coordinator { background: #fff8e8; color: #9a6700; }
 .edi-pill.ready { background: #eef8f0; color: #1b7a35; }
 .edi-pill.assigned { background: #eef2ff; color: #3730a3; }
+.edi-pill.started { background: #e8f4ff; color: #0b6bcb; }
+.edi-pill.test { background: #f3e8ff; color: #6b21a8; }
+.edi-pill.production,
 .edi-pill.completed { background: #f3f4f5; color: #6b6e73; }
 .edi-pill.age-fresh { background: #eef8f0; color: #1b7a35; }
 .edi-pill.age-warn { background: #fff8e8; color: #9a6700; }
@@ -501,7 +505,27 @@ button.edi-tab.active, button.edi-tab.active:hover { background: var(--black); c
 @media (max-width: 700px) {
   .kpi-calendar { overflow-x: auto; }
 }
-.edi-table tr:has(.edi-pill.completed) { opacity: .72; }
+.edi-table tr:has(.edi-pill.completed),
+.edi-table tr:has(.edi-pill.production) { opacity: .72; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.stage-actions { align-items: center; }
+.stage-dropdown { margin: 0; display: inline-flex; }
+.stage-dropdown select {
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 14px;
+  border: 1px solid var(--black);
+  background: var(--black);
+  color: #fff;
+  min-width: 10rem;
+  cursor: pointer;
+}
+.stage-dropdown select:disabled { opacity: .6; cursor: wait; }
+.stage-prompt-sheet { width: min(420px, 100%); height: auto; max-height: calc(100% - 48px); margin: auto; align-self: center; border-radius: 4px; }
+.stage-prompt { justify-content: center; align-items: center; }
 .edi-flag { display: inline-block; margin: 2px 6px 2px 0; padding: 2px 8px; font-size: .75rem; background: #fff4ee; color: #c2410c; }
 .workbuckets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .workbucket.over { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255,95,20,.18); }
