@@ -181,6 +181,11 @@ function toRecord(row) {
     at7Codes,
     lastModifiedByName: row.last_modified_by_name || '',
     lastModifiedByTeam: row.last_modified_by_team || '',
+    ediOwnerId: row.edi_owner_id || '',
+    ediNote: row.edi_note || '',
+    readyAt: row.ready_at ? new Date(row.ready_at).getTime() : null,
+    assignedAt: row.assigned_at ? new Date(row.assigned_at).getTime() : null,
+    completedAt: row.completed_at ? new Date(row.completed_at).getTime() : null,
   }
 }
 
@@ -239,6 +244,38 @@ function companyFromDraft(draft, email) {
   ).trim()
 }
 
+function developerFromRow(row) {
+  const draft = row.prefill && typeof row.prefill === 'object' ? row.prefill : {}
+  const submission = row.submission && typeof row.submission === 'object' ? row.submission : {}
+  return {
+    ...(draft.developer || {}),
+    ...(submission.developer || {}),
+  }
+}
+
+function techContactCompleteRow(row) {
+  const tech = developerFromRow(row)
+  return Boolean(
+    String(tech.developerName || '').trim()
+    && String(tech.email || '').trim()
+    && String(tech.tel || '').trim(),
+  )
+}
+
+function traderIdsCompleteRow(row) {
+  return Boolean(String(row.trader_id_qa || '').trim() && String(row.trader_id_prod || '').trim())
+}
+
+function isReadyRow(row) {
+  return techContactCompleteRow(row) && traderIdsCompleteRow(row)
+}
+
+/** Stamp ready_at the first time tech + trader IDs are complete. */
+function readyAtPatch(row) {
+  if (row.ready_at || !isReadyRow(row)) return {}
+  return { ready_at: new Date().toISOString() }
+}
+
 export default async function handler(req, res) {
   try {
     const token = req.query?.token
@@ -252,12 +289,14 @@ export default async function handler(req, res) {
       if (!rows?.length) return res.status(404).json({ ok: false, error: 'This link is not valid' })
       const existing = rows[0]
       const submission = req.body?.submission || null
+      const nextRow = { ...existing, submission }
       await supabase(`${TABLE}?token=eq.${encodeURIComponent(token)}`, {
         method: 'PATCH',
         prefer: 'return=minimal',
         body: {
           submission,
           updated_at: new Date().toISOString(),
+          ...readyAtPatch(nextRow),
         },
       })
       if (submission) await syncAt7(existing.id, 'submission', submission)
@@ -312,8 +351,36 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PATCH') {
-      const { id, draft, traderIdQa, traderIdProd } = req.body || {}
+      const { id, draft, traderIdQa, traderIdProd, ediOwnerId, ediNote, completed } = req.body || {}
       if (!id) return res.status(400).json({ ok: false, error: 'Missing onboarding id' })
+
+      if (ediOwnerId !== undefined || ediNote !== undefined || completed !== undefined) {
+        const { profile } = await requireRole(req, ['edi'])
+        const existing = await loadOnboarding(id)
+        const body = {
+          ...lastModifiedFields(profile),
+          updated_at: new Date().toISOString(),
+          ...readyAtPatch(existing),
+        }
+        if (ediOwnerId !== undefined) {
+          const nextOwner = String(ediOwnerId || '').trim() || null
+          body.edi_owner_id = nextOwner
+          if (nextOwner && !existing.assigned_at) body.assigned_at = new Date().toISOString()
+        }
+        if (ediNote !== undefined) body.edi_note = String(ediNote || '')
+        if (completed !== undefined) {
+          if (completed) {
+            body.completed_at = existing.completed_at || new Date().toISOString()
+          } else {
+            body.completed_at = null
+          }
+        }
+        const rows = await supabase(`${TABLE}?id=eq.${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          body,
+        })
+        return res.status(200).json({ ok: true, record: toRecord({ ...rows[0], onboarding_at7_code: existing.onboarding_at7_code }) })
+      }
 
       if (traderIdQa !== undefined || traderIdProd !== undefined) {
         const { profile } = await requireRole(req, ['coordinator'])
@@ -324,6 +391,12 @@ export default async function handler(req, res) {
           traderIdProd: traderIdProd !== undefined ? String(traderIdProd || '').trim() : current.traderIdProd,
         }
         const prefill = withTrader(existing.prefill || {}, nextTrader)
+        const nextRow = {
+          ...existing,
+          prefill,
+          trader_id_qa: nextTrader.traderIdQa,
+          trader_id_prod: nextTrader.traderIdProd,
+        }
         const rows = await supabase(`${TABLE}?id=eq.${encodeURIComponent(id)}`, {
           method: 'PATCH',
           body: {
@@ -332,6 +405,7 @@ export default async function handler(req, res) {
             trader_id_prod: nextTrader.traderIdProd,
             ...lastModifiedFields(profile),
             updated_at: new Date().toISOString(),
+            ...readyAtPatch(nextRow),
           },
         })
         return res.status(200).json({ ok: true, record: toRecord({ ...rows[0], onboarding_at7_code: existing.onboarding_at7_code }) })
@@ -347,6 +421,12 @@ export default async function handler(req, res) {
       const trader = pickTrader({ ...(existing.prefill || {}), trader_id_qa: existing.trader_id_qa, trader_id_prod: existing.trader_id_prod })
       const prefill = withTrader({ ...draft, technowRequestId }, trader)
       try {
+        const nextRow = {
+          ...existing,
+          prefill,
+          trader_id_qa: trader.traderIdQa,
+          trader_id_prod: trader.traderIdProd,
+        }
         await supabase(`${TABLE}?id=eq.${encodeURIComponent(id)}`, {
           method: 'PATCH',
           prefer: 'return=minimal',
@@ -359,10 +439,12 @@ export default async function handler(req, res) {
             trader_id_prod: trader.traderIdProd,
             ...lastModifiedFields(profile),
             updated_at: new Date().toISOString(),
+            ...readyAtPatch(nextRow),
           },
         })
         const synced = await syncAt7(id, 'prefill', prefill)
-        return res.status(200).json({ ok: true, record: toRecord(synced) })
+        const stamped = await loadOnboarding(id)
+        return res.status(200).json({ ok: true, record: toRecord(stamped) })
       } catch (error) {
         if (error.code === '23505' || /duplicate|unique/i.test(error.message || '')) {
           return res.status(409).json({ ok: false, error: `An onboarding with Technow Request ID "${technowRequestId}" already exists` })
@@ -373,11 +455,11 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   } catch (error) {
-    const missing = error.code === 'PGRST205' || /onboarding|profiles|needs_at7|at7_/i.test(error.message || '')
+    const missing = error.code === 'PGRST205' || /onboarding|profiles|needs_at7|at7_|edi_owner|ready_at|completed_at/i.test(error.message || '')
     return res.status(missing && error.status !== 401 && error.status !== 403 && error.status !== 404 ? 503 : error.status || 500).json({
       ok: false,
       error: missing && error.status !== 401 && error.status !== 403 && error.status !== 404
-        ? 'Onboarding / AT7 tables are missing. Run supabase/onboarding.sql (or supabase/onboarding_at7.sql on an existing DB) in the Supabase SQL editor.'
+        ? 'Onboarding tables/columns are missing. Run supabase/onboarding.sql (or supabase/onboarding_edi_kpi.sql on an existing DB) in the Supabase SQL editor.'
         : error.message,
     })
   }

@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Shell } from './chrome.jsx'
 import { CreateOnboarding } from './AgentApp.jsx'
-import { emptyDeveloper } from './onboardingLink.js'
-import { loadEdiTeam, loadOnboardings } from './onboardingLink.js'
+import { emptyDeveloper, loadEdiTeam, loadOnboardings, updateEdiAssignment } from './onboardingLink.js'
 
 const STATUSES = [
   { value: 'all', label: 'All statuses' },
@@ -13,6 +12,8 @@ const STATUSES = [
   { value: 'assigned', label: 'Assigned' },
   { value: 'completed', label: 'Completed' },
 ]
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 function personName(team, id) {
   const person = team.find((item) => item.id === id)
@@ -59,16 +60,15 @@ function traderIdsComplete(record) {
   return Boolean(String(record.traderIdQa || '').trim() && String(record.traderIdProd || '').trim())
 }
 
-function deriveStatus(record, overlay = {}) {
-  if (overlay.completed) return 'completed'
-  if (overlay.ownerId) return 'assigned'
+function deriveStatus(record) {
+  if (record.completedAt) return 'completed'
+  if (record.ediOwnerId) return 'assigned'
   if (!techContactComplete(record)) return 'pending-customer'
   if (!traderIdsComplete(record)) return 'pending-coordinator'
   return 'ready'
 }
 
-function recordToItem(record, overlays = {}) {
-  const overlay = overlays[record.id] || {}
+function recordToItem(record) {
   const draft = record.draft || {}
   const submission = record.submission || {}
   const kickoff = Array.isArray(submission.kickoffWeeks)
@@ -82,15 +82,18 @@ function recordToItem(record, overlays = {}) {
     agent: record.agentName || '—',
     created: formatCreated(record.createdAt),
     createdAt: record.createdAt || 0,
-    status: deriveStatus(record, overlay),
+    status: deriveStatus(record),
     kickoff,
     technicalContact: tech.developerName || '',
     technicalEmail: tech.email || '',
     technicalMobile: tech.tel || '',
     mobileVerified: Boolean(tech.mobileVerified),
-    ownerId: overlay.ownerId || '',
-    completed: Boolean(overlay.completed),
-    note: overlay.note || '',
+    ownerId: record.ediOwnerId || '',
+    completed: Boolean(record.completedAt),
+    note: record.ediNote || '',
+    readyAt: record.readyAt || null,
+    assignedAt: record.assignedAt || null,
+    completedAt: record.completedAt || null,
     traderIdQa: record.traderIdQa || '',
     traderIdProd: record.traderIdProd || '',
     needsAt7Mapping: Boolean(record.needsAt7Mapping),
@@ -111,6 +114,78 @@ function gaps(item) {
   if (item.status === 'pending-coordinator') missing.push('Trader ID QA/Prod missing')
   if (item.needsAt7Mapping) missing.push(item.at7CustomCount > 1 ? `Custom mapping (${item.at7CustomCount})` : 'Custom mapping')
   return missing
+}
+
+function avgDays(samples) {
+  if (!samples.length) return null
+  const total = samples.reduce((sum, value) => sum + value, 0)
+  return total / samples.length
+}
+
+function formatAvgDays(value) {
+  if (value == null) return '—'
+  if (value < 1) return `${Math.round(value * 24)}h`
+  return `${value.toFixed(1)}d`
+}
+
+function startOfDay(ms) {
+  const date = new Date(ms)
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
+}
+
+function dayKey(ms) {
+  const date = new Date(ms)
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function ageDays(fromMs, now = Date.now()) {
+  if (!fromMs) return 0
+  return Math.max(0, Math.floor((now - fromMs) / DAY_MS))
+}
+
+function ageBucket(days) {
+  if (days <= 2) return 'fresh'
+  if (days <= 7) return 'warn'
+  return 'stale'
+}
+
+function buildCompletionCalendar(items, weeks = 26) {
+  const today = startOfDay(Date.now())
+  const counts = new Map()
+  items.forEach((item) => {
+    if (!item.completedAt) return
+    const key = dayKey(item.completedAt)
+    counts.set(key, (counts.get(key) || 0) + 1)
+  })
+  const start = new Date(today)
+  start.setDate(start.getDate() - ((weeks * 7) - 1) - start.getDay())
+  const days = []
+  for (let i = 0; i < weeks * 7; i += 1) {
+    const ms = start.getTime() + (i * DAY_MS)
+    const key = dayKey(ms)
+    days.push({
+      key,
+      ms,
+      count: counts.get(key) || 0,
+      future: ms > today,
+      label: new Date(ms).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+    })
+  }
+  const weekStarts = []
+  for (let i = 0; i < weeks; i += 1) weekStarts.push(days[i * 7])
+  return { days, weekStarts, counts }
+}
+
+function completionLevel(count) {
+  if (!count) return 0
+  if (count === 1) return 1
+  if (count === 2) return 2
+  if (count <= 4) return 3
+  return 4
 }
 
 function OnboardingTable({ rows, team, onOpen, draggable = false }) {
@@ -151,6 +226,140 @@ function OnboardingTable({ rows, team, onOpen, draggable = false }) {
   )
 }
 
+function KpiTab({ items, onOpen }) {
+  const now = Date.now()
+  const readyUnassigned = useMemo(
+    () => items
+      .filter((item) => item.status === 'ready' && !item.ownerId)
+      .map((item) => ({
+        ...item,
+        age: ageDays(item.readyAt || item.createdAt, now),
+      }))
+      .sort((a, b) => b.age - a.age),
+    [items, now],
+  )
+
+  const avgCreatedToReady = useMemo(() => {
+    const samples = items
+      .filter((item) => item.readyAt && item.createdAt)
+      .map((item) => (item.readyAt - item.createdAt) / DAY_MS)
+    return avgDays(samples)
+  }, [items])
+
+  const avgCreatedToComplete = useMemo(() => {
+    const samples = items
+      .filter((item) => item.completedAt && item.createdAt)
+      .map((item) => (item.completedAt - item.createdAt) / DAY_MS)
+    return avgDays(samples)
+  }, [items])
+
+  const calendar = useMemo(() => buildCompletionCalendar(items, 26), [items])
+  const weekStart = startOfDay(now) - (new Date(now).getDay() * DAY_MS)
+  const completedThisWeek = items.filter((item) => item.completedAt && item.completedAt >= weekStart).length
+  const monthLabels = useMemo(() => {
+    const labels = []
+    let last = ''
+    calendar.weekStarts.forEach((day, index) => {
+      const label = new Date(day.ms).toLocaleDateString('en-CA', { month: 'short' })
+      if (label !== last) {
+        labels.push({ index, label })
+        last = label
+      }
+    })
+    return labels
+  }, [calendar])
+
+  return (
+    <>
+      <div className="edi-stats kpi-stats">
+        <div>
+          <b>{formatAvgDays(avgCreatedToReady)}</b>
+          <span>Avg created → ready</span>
+        </div>
+        <div>
+          <b>{formatAvgDays(avgCreatedToComplete)}</b>
+          <span>Avg created → complete</span>
+        </div>
+        <div>
+          <b>{readyUnassigned.length}</b>
+          <span>Ready unassigned</span>
+        </div>
+        <div>
+          <b>{completedThisWeek}</b>
+          <span>Completed this week</span>
+        </div>
+      </div>
+
+      <section className="card">
+        <div className="dash-top">
+          <div>
+            <h3 className="dash-title">Completions</h3>
+            <p className="intro">Last 26 weeks · darker = more completions that day</p>
+          </div>
+          <p className="intro">{completedThisWeek} this week</p>
+        </div>
+        <div className="kpi-calendar" role="img" aria-label="Completion activity calendar">
+          <div className="kpi-cal-months" style={{ gridTemplateColumns: `repeat(${calendar.weekStarts.length}, 12px)` }}>
+            {monthLabels.map((item) => (
+              <span key={`${item.label}-${item.index}`} style={{ gridColumn: item.index + 1 }}>{item.label}</span>
+            ))}
+          </div>
+          <div className="kpi-cal-body">
+            <div className="kpi-cal-dow" aria-hidden="true">
+              <span>Mon</span>
+              <span>Wed</span>
+              <span>Fri</span>
+            </div>
+            <div className="kpi-cal-grid" style={{ gridTemplateColumns: `repeat(${calendar.weekStarts.length}, 12px)` }}>
+              {calendar.days.map((day) => (
+                <span
+                  key={day.key}
+                  className={`kpi-cal-cell level-${day.future ? 0 : completionLevel(day.count)}`}
+                  title={day.future ? '' : `${day.label}: ${day.count} completed`}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="kpi-cal-legend">
+            <span>Less</span>
+            {[0, 1, 2, 3, 4].map((level) => <span key={level} className={`kpi-cal-cell level-${level}`} />)}
+            <span>More</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <h3 className="dash-title">Ready unassigned</h3>
+        <p className="intro">Aging from the Ready timestamp (or created date if Ready was never stamped).</p>
+        {readyUnassigned.length === 0 ? (
+          <p className="intro">Nothing waiting in Ready.</p>
+        ) : (
+          <table className="edi-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Sales agent</th>
+                <th>Age</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {readyUnassigned.map((item) => (
+                <tr key={item.id}>
+                  <td><strong>{item.company}</strong><div className="intro">{item.email}</div></td>
+                  <td>{item.agent}</td>
+                  <td><span className={`edi-pill age-${ageBucket(item.age)}`}>{item.age}d</span></td>
+                  <td><button type="button" className="secondary status-edit" onClick={() => onOpen(item.id)}>Open</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </>
+  )
+}
+
 export function EdiDashboardPreview() {
   return (
     <EdiDashboard
@@ -164,9 +373,10 @@ export default function EdiDashboard({ profile, onSignOut }) {
   const [tab, setTab] = useState('board')
   const [records, setRecords] = useState([])
   const [team, setTeam] = useState([])
-  const [overlays, setOverlays] = useState({})
   const [loadError, setLoadError] = useState('')
+  const [saveError, setSaveError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState('')
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [agent, setAgent] = useState('all')
@@ -195,10 +405,7 @@ export default function EdiDashboard({ profile, onSignOut }) {
     return () => { cancel = true }
   }, [])
 
-  const items = useMemo(
-    () => records.map((record) => recordToItem(record, overlays)),
-    [records, overlays],
-  )
+  const items = useMemo(() => records.map(recordToItem), [records])
   const agents = [...new Set(items.map((item) => item.agent).filter(Boolean))].sort()
   const sortBoard = (list) => [...list].sort((a, b) => {
     const aDone = a.status === 'completed' ? 1 : 0
@@ -229,8 +436,29 @@ export default function EdiDashboard({ profile, onSignOut }) {
     return [...map.entries()]
   }, [items])
 
-  const assign = (id, ownerId) => setOverlays((current) => ({ ...current, [id]: { ...current[id], ownerId } }))
-  const patch = (id, next) => setOverlays((current) => ({ ...current, [id]: { ...current[id], ...next } }))
+  const applyRecord = (saved) => {
+    setRecords((current) => current.map((item) => (item.id === saved.id ? saved : item)))
+  }
+
+  const persistEdi = async (id, patch) => {
+    setBusyId(id)
+    setSaveError('')
+    try {
+      const saved = await updateEdiAssignment(id, patch)
+      applyRecord(saved)
+      return saved
+    } catch (error) {
+      setSaveError(error.message)
+      throw error
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  const assign = (id, ownerId) => {
+    persistEdi(id, { ediOwnerId: ownerId }).catch(() => {})
+  }
+
   const onDropOwner = (ownerId) => (event) => {
     event.preventDefault()
     const id = event.dataTransfer.getData('text/plain')
@@ -245,6 +473,14 @@ export default function EdiDashboard({ profile, onSignOut }) {
       setEditing(record)
     }
   }
+
+  const tabTitle = {
+    board: 'All onboardings',
+    mine: 'My assignment',
+    team: 'EDI team',
+    calendar: 'Kickoff calendar',
+    kpi: 'KPIs',
+  }[tab] || 'All onboardings'
 
   if (editing) {
     return (
@@ -266,21 +502,17 @@ export default function EdiDashboard({ profile, onSignOut }) {
         {welcome && <p className="welcome-line">Welcome, {welcome}</p>}
         <div className="dash-top">
           <div>
-            <h2 className="dash-title">
-              {tab === 'mine' ? 'My assignment'
-                : tab === 'team' ? 'EDI team'
-                  : tab === 'calendar' ? 'Kickoff calendar'
-                    : 'All onboardings'}
-            </h2>
+            <h2 className="dash-title">{tabTitle}</h2>
           </div>
           <div className="edi-tabs" role="tablist">
-            {[['board', 'Onboardings'], ['mine', 'My Assignment'], ['team', 'Team'], ['calendar', 'Kickoff']].map(([value, label]) => (
+            {[['board', 'Onboardings'], ['mine', 'My Assignment'], ['team', 'Team'], ['calendar', 'Kickoff'], ['kpi', 'KPIs']].map(([value, label]) => (
               <button key={value} type="button" role="tab" aria-selected={tab === value} className={`secondary edi-tab${tab === value ? ' active' : ''}`} onClick={() => setTab(value)}>{label}</button>
             ))}
           </div>
         </div>
 
         {loadError && <div className="banner err" role="alert">{loadError}</div>}
+        {saveError && <div className="banner err" role="alert">{saveError}</div>}
         {loading && <p className="intro">Loading onboardings…</p>}
 
         {tab === 'board' && !loading && (
@@ -399,6 +631,10 @@ export default function EdiDashboard({ profile, onSignOut }) {
           </section>
         )}
 
+        {tab === 'kpi' && !loading && (
+          <KpiTab items={items} onOpen={setOpenId} />
+        )}
+
       </main>
       {open && createPortal(
         <div className="edi-detail" role="dialog" aria-modal="true" aria-label={`${open.company} onboarding`}>
@@ -409,7 +645,7 @@ export default function EdiDashboard({ profile, onSignOut }) {
                 <h2>{open.company}</h2>
                 <p className="edi-created">Created on {open.created}</p>
                 <p className="intro">Sales Agent: {open.agent || '—'}</p>
-                <p className="intro">Coordinator: {personName(team, open.ownerId) || '—'}</p>
+                <p className="intro">EDI owner: {personName(team, open.ownerId) || '—'}</p>
               </div>
               <button type="button" className="secondary status-edit" onClick={() => setOpenId('')}>Close</button>
             </div>
@@ -440,6 +676,7 @@ export default function EdiDashboard({ profile, onSignOut }) {
               <span>EDI owner</span>
               <select
                 value={open.ownerId}
+                disabled={busyId === open.id}
                 onChange={(event) => assign(open.id, event.target.value)}
               >
                 <option value="">Unassigned</option>
@@ -452,10 +689,42 @@ export default function EdiDashboard({ profile, onSignOut }) {
             </label>
             <label className="field">
               <span>Internal note</span>
-              <textarea rows={3} value={open.note} placeholder="Only the EDI team sees this" onChange={(event) => patch(open.id, { note: event.target.value })} />
+              <textarea
+                rows={3}
+                value={open.note}
+                placeholder="Only the EDI team sees this"
+                disabled={busyId === open.id}
+                onChange={(event) => {
+                  const note = event.target.value
+                  setRecords((current) => current.map((item) => (
+                    item.id === open.id ? { ...item, ediNote: note } : item
+                  )))
+                }}
+                onBlur={(event) => {
+                  persistEdi(open.id, { ediNote: event.target.value }).catch(() => {})
+                }}
+              />
             </label>
             <div className="actions">
               <button type="button" onClick={() => openRecord(open.id)}>View form</button>
+              {open.completed ? (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busyId === open.id}
+                  onClick={() => persistEdi(open.id, { completed: false }).catch(() => {})}
+                >
+                  Reopen
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busyId === open.id}
+                  onClick={() => persistEdi(open.id, { completed: true }).catch(() => {})}
+                >
+                  Mark completed
+                </button>
+              )}
             </div>
           </div>
         </div>,

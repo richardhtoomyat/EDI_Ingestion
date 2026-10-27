@@ -208,6 +208,14 @@ export function updateTraderIds(id, { traderIdQa, traderIdProd }) {
   return sendOnboarding('/api/onboardings', 'PATCH', { id, traderIdQa, traderIdProd })
 }
 
+export function updateEdiAssignment(id, { ediOwnerId, ediNote, completed }) {
+  const body = { id }
+  if (ediOwnerId !== undefined) body.ediOwnerId = ediOwnerId
+  if (ediNote !== undefined) body.ediNote = ediNote
+  if (completed !== undefined) body.completed = completed
+  return sendOnboarding('/api/onboardings', 'PATCH', body)
+}
+
 export function traderLabel(value) {
   const text = String(value || '').trim()
   return text || 'Not available'
