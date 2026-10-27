@@ -88,6 +88,7 @@ function toProfile(row) {
     firstName: row.first_name || '',
     lastName: row.last_name || '',
     role: row.role,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : null,
   }
 }
 
@@ -97,14 +98,28 @@ export default async function handler(req, res) {
       return res.status(405).json({ ok: false, error: 'Method not allowed' })
     }
 
-    await requireRole(req, ['edi'])
+    const { profile } = await requireRole(req, ['edi', 'admin'])
     const role = String(req.query?.role || 'edi').trim() || 'edi'
+
+    if (role === 'all') {
+      if (profile.role !== 'admin') {
+        return res.status(403).json({ ok: false, error: 'Admin access required' })
+      }
+      const rows = await supabase(
+        'profiles?select=id,email,first_name,last_name,role,created_at&order=first_name.asc,last_name.asc',
+      )
+      return res.status(200).json({
+        ok: true,
+        profiles: (rows || []).map(toProfile),
+      })
+    }
+
     if (role !== 'edi') {
       return res.status(400).json({ ok: false, error: 'Only EDI profiles can be listed' })
     }
 
     const rows = await supabase(
-      `profiles?role=eq.edi&select=id,email,first_name,last_name,role&order=first_name.asc,last_name.asc`,
+      'profiles?role=eq.edi&select=id,email,first_name,last_name,role,created_at&order=first_name.asc,last_name.asc',
     )
     return res.status(200).json({
       ok: true,

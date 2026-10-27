@@ -460,9 +460,66 @@ function InviteUserModal({ onClose, onInvited }) {
   )
 }
 
+function roleLabel(role) {
+  if (role === 'sale') return 'Sales'
+  if (role === 'coordinator') return 'Coordinator'
+  if (role === 'admin') return 'Admin'
+  if (role === 'edi') return 'EDI'
+  return role || '—'
+}
+
+function memberName(person) {
+  const name = [person.firstName, person.lastName].map((part) => String(part || '').trim()).filter(Boolean).join(' ')
+  return name || '—'
+}
+
+function formatJoined(value) {
+  if (!value) return '—'
+  return new Date(value).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export function AdministrationPage({ onBack }) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [notice, setNotice] = useState('')
+  const [members, setMembers] = useState([])
+  const [loadError, setLoadError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [query, setQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+
+  const refreshMembers = () => {
+    setLoading(true)
+    return import('./onboardingLink.js')
+      .then(({ loadOrganization }) => loadOrganization())
+      .then((profiles) => {
+        setMembers(profiles)
+        setLoadError('')
+      })
+      .catch((error) => {
+        setLoadError(error.message || 'Could not load organization')
+        setMembers([])
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    refreshMembers()
+  }, [])
+
+  const filtered = members.filter((person) => {
+    if (roleFilter !== 'all' && person.role !== roleFilter) return false
+    const haystack = `${person.firstName} ${person.lastName} ${person.email}`.toLowerCase()
+    if (query.trim() && !haystack.includes(query.trim().toLowerCase())) return false
+    return true
+  })
+
+  const counts = {
+    all: members.length,
+    sale: members.filter((item) => item.role === 'sale').length,
+    edi: members.filter((item) => item.role === 'edi').length,
+    coordinator: members.filter((item) => item.role === 'coordinator').length,
+    admin: members.filter((item) => item.role === 'admin').length,
+  }
 
   return (
     <main className="page edi-page">
@@ -473,21 +530,77 @@ export function AdministrationPage({ onBack }) {
         </div>
         <div className="actions">
           <button type="button" className="secondary" onClick={onBack}>Back</button>
+          <button type="button" className="secondary" disabled={loading} onClick={() => refreshMembers()}>Refresh</button>
           <button type="button" onClick={() => { setNotice(''); setInviteOpen(true) }}>Invite user</button>
         </div>
       </div>
       {notice && <div className="banner ok" role="status">{notice}</div>}
+      {loadError && <div className="banner err" role="alert">{loadError}</div>}
+
+      <div className="edi-stats">
+        <div><b>{counts.all}</b><span>Everyone</span></div>
+        <div><b>{counts.sale}</b><span>Sales</span></div>
+        <div><b>{counts.edi}</b><span>EDI</span></div>
+        <div><b>{counts.admin + counts.coordinator}</b><span>Admin / Coordinator</span></div>
+      </div>
+
       <section className="card">
-        <h3>Users</h3>
-        <p className="intro">Invite teammates by email and assign their portal role. Admin can only be granted here or via SQL.</p>
-        <div className="actions">
-          <button type="button" onClick={() => { setNotice(''); setInviteOpen(true) }}>Invite user</button>
+        <div className="dash-top">
+          <div>
+            <h3 className="dash-title">Organization</h3>
+            <p className="intro">Everyone with an account in this workspace.</p>
+          </div>
         </div>
+        <div className="edi-filters admin-org-filters">
+          <label className="field">
+            <span>Search</span>
+            <input value={query} placeholder="Name or email" onChange={(event) => setQuery(event.target.value)} />
+          </label>
+          <label className="field">
+            <span>Role</span>
+            <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
+              <option value="all">All roles</option>
+              {INVITE_ROLES.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {loading ? (
+          <p className="intro">Loading organization…</p>
+        ) : filtered.length === 0 ? (
+          <p className="intro">No people match these filters.</p>
+        ) : (
+          <table className="edi-table admin-org-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Joined</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((person) => (
+                <tr key={person.id}>
+                  <td><strong>{memberName(person)}</strong></td>
+                  <td>{person.email || '—'}</td>
+                  <td><span className={`edi-pill role-${person.role}`}>{roleLabel(person.role)}</span></td>
+                  <td>{formatJoined(person.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
+
       {inviteOpen && (
         <InviteUserModal
           onClose={() => setInviteOpen(false)}
-          onInvited={(result) => setNotice(result.message || 'Invitations sent.')}
+          onInvited={(result) => {
+            setNotice(result.message || 'Invitations sent.')
+            refreshMembers()
+          }}
         />
       )}
     </main>

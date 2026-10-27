@@ -185,6 +185,13 @@ export async function loadEdiTeam() {
   return payload.profiles || []
 }
 
+export async function loadOrganization() {
+  const response = await fetch('/api/profiles?role=all', { headers: await authHeaders() })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || 'Could not load organization')
+  return payload.profiles || []
+}
+
 async function sendOnboarding(path, method, body) {
   const response = await fetch(path, {
     method,

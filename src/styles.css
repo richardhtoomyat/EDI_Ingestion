@@ -782,6 +782,12 @@ button.edi-scrim, button.edi-scrim:hover { position: absolute; inset: 0; backgro
 @media (max-width: 720px) {
   .invite-grid { grid-template-columns: 1fr; }
 }
+.admin-org-filters { margin: 12px 0 16px; }
+.admin-org-table { margin-top: 4px; }
+.edi-pill.role-sale { background: #eef2ff; color: #3730a3; }
+.edi-pill.role-edi { background: #e8f4ff; color: #0b6bcb; }
+.edi-pill.role-coordinator { background: #fff8e8; color: #9a6700; }
+.edi-pill.role-admin { background: #fff4ee; color: #c2410c; }
 
 /* Theme support */
 html[data-theme='dark'] {
