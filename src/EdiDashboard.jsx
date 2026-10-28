@@ -738,27 +738,20 @@ export default function EdiDashboard({
 
   const renderBucketCard = (item, ownerId) => {
     const armed = armedItemId === item.id
-    const note = item.note || ''
-    const stopCardGesture = (event) => {
-      event.stopPropagation()
-      cancelLongPress()
-    }
     return (
-      <article
+      <button
         key={item.id}
-        className={`bucket-card${dragOverItem === item.id ? ' drop-target' : ''}${armed ? ' armed' : ''}${note.trim() ? ' has-blocker' : ''}`}
+        type="button"
+        className={`bucket-card${dragOverItem === item.id ? ' drop-target' : ''}${armed ? ' armed' : ''}`}
         data-item-id={item.id}
         draggable
-        onPointerDown={(event) => {
-          if (event.target.closest('.bucket-card-ops')) return
-          startLongPress(() => {
-            suppressClick.current = true
-            armedItemRef.current = item.id
-            armedPersonRef.current = ''
-            setArmedItemId(item.id)
-            setArmedPersonId('')
-          })(event)
-        }}
+        onPointerDown={startLongPress(() => {
+          suppressClick.current = true
+          armedItemRef.current = item.id
+          armedPersonRef.current = ''
+          setArmedItemId(item.id)
+          setArmedPersonId('')
+        })}
         onPointerUp={() => {
           cancelLongPress()
           if (dragKindRef.current !== 'item') {
@@ -776,10 +769,6 @@ export default function EdiDashboard({
           if (armedItemRef.current === item.id || longPressTimer.current) event.preventDefault()
         }}
         onDragStart={(event) => {
-          if (event.target.closest('.bucket-card-ops')) {
-            event.preventDefault()
-            return
-          }
           if (armedItemRef.current !== item.id) {
             event.preventDefault()
             cancelLongPress()
@@ -810,84 +799,20 @@ export default function EdiDashboard({
           event.stopPropagation()
           onDropInBucket(ownerId)(event)
         }}
+        onClick={() => {
+          if (suppressClick.current || armedItemRef.current === item.id) {
+            suppressClick.current = false
+            armedItemRef.current = ''
+            setArmedItemId('')
+            return
+          }
+          setOpenId(item.id)
+        }}
       >
-        <button
-          type="button"
-          className="bucket-card-main"
-          onClick={() => {
-            if (suppressClick.current || armedItemRef.current === item.id) {
-              suppressClick.current = false
-              armedItemRef.current = ''
-              setArmedItemId('')
-              return
-            }
-            setOpenId(item.id)
-          }}
-        >
-          <strong>{item.company}</strong>
-          <span>{statusLabel(item.status, item, team)}</span>
-          {item.needsAt7Mapping && <span className="edi-flag">Custom mapping</span>}
-          {note.trim() ? <span className="bucket-blocker">{note.trim()}</span> : null}
-        </button>
-        <div className="bucket-card-ops" onPointerDown={stopCardGesture}>
-          <label className="bucket-op">
-            <span className="visually-hidden">Stage</span>
-            <select
-              value={item.ediStage || ''}
-              disabled={busyId === item.id}
-              onClick={(event) => event.stopPropagation()}
-              onChange={(event) => {
-                const next = event.target.value
-                if (!next) return
-                requestStage(item, next)
-              }}
-            >
-              <option value="" disabled>{item.ediStage ? 'Stage…' : 'Set stage…'}</option>
-              {EDI_STAGES.map((stage) => (
-                <option key={stage.value} value={stage.value}>{stage.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="bucket-op">
-            <span className="visually-hidden">Assign</span>
-            <select
-              value={item.ownerId || ''}
-              disabled={busyId === item.id}
-              onClick={(event) => event.stopPropagation()}
-              onChange={(event) => assign(item.id, event.target.value)}
-            >
-              <option value="">{ownerId === '' ? 'Assign…' : 'Unassigned'}</option>
-              {team.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {[person.firstName, person.lastName].filter(Boolean).join(' ') || person.email}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="bucket-op bucket-op-note">
-            <span className="visually-hidden">Blocker note</span>
-            <input
-              type="text"
-              defaultValue={note}
-              key={`${item.id}:${note}`}
-              placeholder="Blocker / note"
-              disabled={busyId === item.id}
-              onClick={(event) => event.stopPropagation()}
-              onBlur={(event) => {
-                const next = event.target.value
-                if (next === note) return
-                setRecords((current) => current.map((record) => (
-                  record.id === item.id ? { ...record, ediNote: next } : record
-                )))
-                persistEdi(item.id, { ediNote: next }).catch(() => {})
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') event.currentTarget.blur()
-              }}
-            />
-          </label>
-        </div>
-      </article>
+        <strong>{item.company}</strong>
+        <span>{statusLabel(item.status, item, team)}</span>
+        {item.needsAt7Mapping && <span className="edi-flag">Custom mapping</span>}
+      </button>
     )
   }
 

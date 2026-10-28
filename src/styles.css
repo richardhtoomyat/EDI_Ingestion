@@ -643,94 +643,26 @@ button.team-hide-toggle.open:hover {
   align-self: start;
 }
 .bucket-label { margin: 10px 0 6px; font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--grey); }
-.bucket-card {
-  width: 100%;
-  margin: 0 0 8px;
-  padding: 0;
-  text-align: left;
-  background: #fff;
-  color: var(--black);
-  border: 1px solid var(--line);
-  box-shadow: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+button.bucket-card, button.bucket-card:hover, button.bucket-card:active {
+  width: 100%; margin: 0 0 8px; padding: 10px 12px; text-align: left; background: #fff; color: var(--black);
+  border: 1px solid var(--line); box-shadow: none; transform: none; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  cursor: pointer;
   user-select: none;
   touch-action: manipulation;
-  overflow: hidden;
 }
-.bucket-card.armed {
+button.bucket-card.armed,
+button.bucket-card.armed:hover {
   cursor: grabbing;
   border-color: var(--orange);
   box-shadow: 0 6px 16px rgba(255,95,20,.22);
   transform: scale(1.02);
 }
-.bucket-card.drop-target {
+button.bucket-card.drop-target,
+button.bucket-card.drop-target:hover {
   border-color: var(--orange);
   box-shadow: 0 0 0 2px rgba(255,95,20,.2);
 }
-.bucket-card.has-blocker {
-  border-color: #c45c26;
-}
-button.bucket-card-main, button.bucket-card-main:hover, button.bucket-card-main:active {
-  width: 100%;
-  margin: 0;
-  padding: 10px 12px 8px;
-  text-align: left;
-  background: transparent;
-  color: inherit;
-  border: 0;
-  box-shadow: none;
-  transform: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  cursor: pointer;
-  border-radius: 0;
-}
-.bucket-card-main span { color: var(--grey); font-size: .8rem; font-weight: 400; }
-.bucket-blocker {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  margin-top: 4px;
-  color: #9a3412 !important;
-  font-size: .78rem !important;
-  font-weight: 600 !important;
-  line-height: 1.25;
-}
-.bucket-card-ops {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding: 0 10px 10px;
-}
-.bucket-op {
-  display: block;
-  margin: 0;
-  min-width: 0;
-}
-.bucket-op-note {
-  grid-column: 1 / -1;
-}
-.bucket-op select,
-.bucket-op input {
-  width: 100%;
-  margin: 0;
-  padding: 5px 7px;
-  font: inherit;
-  font-size: .75rem;
-  color: var(--black);
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 0;
-}
-.bucket-op select:disabled,
-.bucket-op input:disabled {
-  opacity: .6;
-}
+button.bucket-card span { color: var(--grey); font-size: .8rem; font-weight: 400; }
 .kickoff-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .kickoff-board article { border: 1px solid var(--line); padding: 12px 14px; }
 .kickoff-board article.clash { border-color: var(--orange); background: #fff4ee; }
