@@ -706,6 +706,74 @@ button.edi-scrim, button.edi-scrim:hover { position: absolute; inset: 0; backgro
 .edi-sheet select, .edi-filters select { font: inherit; font-weight: 400; padding: 10px 12px; border: 1px solid var(--grey); background: #fff; width: 100%; }
 .code-review { list-style: none; margin: 0; padding: 0; }
 .code-review li { display: grid; grid-template-columns: 1fr 4rem 4rem; gap: 8px; align-items: center; margin: 8px 0; }
+.mention-note { position: relative; }
+.mention-note textarea { width: 100%; resize: vertical; }
+.mention-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 30;
+  max-height: 220px;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .12);
+}
+.mention-empty { padding: 10px 12px; color: var(--grey); font-size: .85rem; }
+button.mention-option, button.mention-option:hover, button.mention-option:active {
+  width: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: #fff;
+  color: var(--black);
+  box-shadow: none;
+  transform: none;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+button.mention-option:last-child { border-bottom: 0; }
+button.mention-option.active,
+button.mention-option:hover {
+  background: #fff4ee;
+}
+button.mention-option span { color: var(--grey); font-size: .78rem; font-weight: 400; }
+button.edi-tab.has-unread {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+.notification-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.notification-list li.unread .notification-item {
+  border-color: var(--orange);
+  box-shadow: inset 3px 0 0 var(--orange);
+}
+button.notification-item, button.notification-item:hover, button.notification-item:active {
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  text-align: left;
+  background: #fff;
+  color: var(--black);
+  border: 1px solid var(--line);
+  box-shadow: none;
+  transform: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+button.notification-item span { color: var(--grey); font-size: .85rem; font-weight: 400; }
+button.notification-item em {
+  font-style: normal;
+  color: var(--black);
+  font-size: .9rem;
+}
+button.notification-item .notification-time { font-size: .75rem; }
 .custom-code { color: #c2410c; background: #fff4ee; border: 1px solid var(--orange); text-align: center; padding: 4px 0; }
 .flag-row { margin: 8px 0 14px; }
 @media (max-width: 900px) {

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { at7CustomCount, normalizeAt7 } from './at7Normalize.js'
+import { newlyMentionedIds, noteExcerpt } from './mentionUtils.js'
 
 const TABLE = 'onboarding'
 const AT7_TABLE = 'onboarding_at7_code'
@@ -432,6 +433,7 @@ export default async function handler(req, res) {
           }
           body.edi_bucket_order = Math.trunc(order)
         }
+        const previousNote = existing.edi_note || ''
         if (ediNote !== undefined) body.edi_note = String(ediNote || '')
         if (ediStage !== undefined) {
           const stage = String(ediStage || '').trim()
@@ -489,6 +491,29 @@ export default async function handler(req, res) {
           method: 'PATCH',
           body,
         })
+        if (ediNote !== undefined) {
+          try {
+            const teamRows = await supabase(
+              'profiles?role=eq.edi&select=id,email,first_name,last_name',
+            )
+            const mentioned = newlyMentionedIds(previousNote, body.edi_note, teamRows || [], user.id)
+            const excerpt = noteExcerpt(body.edi_note)
+            for (const recipientId of mentioned) {
+              await supabase('edi_notification', {
+                method: 'POST',
+                body: {
+                  recipient_id: recipientId,
+                  actor_id: user.id,
+                  onboarding_id: id,
+                  note_excerpt: excerpt,
+                },
+                prefer: 'return=minimal',
+              })
+            }
+          } catch {
+            // Note save should succeed even if notifications table is missing.
+          }
+        }
         return res.status(200).json({ ok: true, record: toRecord({ ...rows[0], onboarding_at7_code: existing.onboarding_at7_code }) })
       }
 

@@ -266,6 +266,27 @@ export function updateEdiAssignment(id, { ediOwnerId, ediNote, completed, ediSta
   return sendOnboarding('/api/onboardings', 'PATCH', body)
 }
 
+export async function loadNotifications() {
+  const response = await fetch('/api/notifications', { headers: await authHeaders() })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || 'Could not load notifications')
+  return {
+    notifications: payload.notifications || [],
+    unreadCount: Number(payload.unreadCount) || 0,
+  }
+}
+
+export async function markNotificationsRead({ id, ids, all } = {}) {
+  const response = await fetch('/api/notifications', {
+    method: 'PATCH',
+    headers: await authHeaders(),
+    body: JSON.stringify({ id, ids, all }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || 'Could not update notifications')
+  return payload
+}
+
 export async function reorderEdiBucket(bucketOrders) {
   const response = await fetch('/api/onboardings', {
     method: 'PATCH',

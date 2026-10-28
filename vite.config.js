@@ -4,6 +4,7 @@ import handler from './api/test-sftp.js'
 import onboardings from './api/onboardings.js'
 import profiles from './api/profiles.js'
 import invite from './api/invite.js'
+import notifications from './api/notifications.js'
 
 if (!process.env.SFTP_HOST) process.env.SFTP_HOST = '127.0.0.1'
 
@@ -49,6 +50,7 @@ function sftpDevApi() {
       server.middlewares.use('/api/onboardings', devApi('/api/onboardings', onboardings))
       server.middlewares.use('/api/profiles', devApi('/api/profiles', profiles, ['GET', 'PATCH']))
       server.middlewares.use('/api/invite', devApi('/api/invite', invite, ['POST']))
+      server.middlewares.use('/api/notifications', devApi('/api/notifications', notifications, ['GET', 'PATCH']))
     },
   }
 }

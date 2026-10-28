@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Shell } from './chrome.jsx'
 import { CreateOnboarding } from './AgentApp.jsx'
+import MentionNote from './MentionNote.jsx'
 import {
-  emptyDeveloper, loadEdiTeam, loadOnboardings, reorderEdiBucket, updateEdiTeamView, updateEdiAssignment,
+  emptyDeveloper, loadEdiTeam, loadNotifications, loadOnboardings, markNotificationsRead,
+  reorderEdiBucket, updateEdiTeamView, updateEdiAssignment,
 } from './onboardingLink.js'
 
 const LONG_PRESS_MS = 420
@@ -422,6 +424,8 @@ export default function EdiDashboard({
   const [team, setTeam] = useState([])
   const [teamHidden, setTeamHidden] = useState([])
   const [hidePickerOpen, setHidePickerOpen] = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const [loadError, setLoadError] = useState('')
   const [saveError, setSaveError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -479,6 +483,15 @@ export default function EdiDashboard({
     return (b.createdAt || 0) - (a.createdAt || 0)
   })
 
+  const refreshNotifications = () => loadNotifications()
+    .then((next) => {
+      setNotifications(next.notifications || [])
+      setUnreadCount(next.unreadCount || 0)
+    })
+    .catch(() => {
+      // Notifications are optional until SQL is applied.
+    })
+
   useEffect(() => {
     let cancel = false
     setLoading(true)
@@ -498,7 +511,12 @@ export default function EdiDashboard({
         setTeamHidden([])
       })
       .finally(() => { if (!cancel) setLoading(false) })
-    return () => { cancel = true }
+    refreshNotifications()
+    const timer = setInterval(refreshNotifications, 30000)
+    return () => {
+      cancel = true
+      clearInterval(timer)
+    }
   }, [])
 
   const items = useMemo(() => records.map(recordToItem), [records])
@@ -824,12 +842,40 @@ export default function EdiDashboard({
     }
   }
 
+  const openNotification = async (item) => {
+    if (!item?.readAt && item?.id) {
+      try {
+        await markNotificationsRead({ id: item.id })
+        setNotifications((current) => current.map((row) => (
+          row.id === item.id ? { ...row, readAt: Date.now() } : row
+        )))
+        setUnreadCount((count) => Math.max(0, count - 1))
+      } catch {
+        // Keep list usable even if mark-read fails.
+      }
+    }
+    if (item?.onboardingId) setOpenId(item.onboardingId)
+  }
+
+  const markAllNotificationsRead = async () => {
+    try {
+      await markNotificationsRead({ all: true })
+      setNotifications((current) => current.map((row) => (
+        row.readAt ? row : { ...row, readAt: Date.now() }
+      )))
+      setUnreadCount(0)
+    } catch (error) {
+      setSaveError(error.message)
+    }
+  }
+
   const tabTitle = {
     board: 'All onboardings',
     mine: 'My assignment',
     team: 'EDI team',
     calendar: 'Kickoff calendar',
     kpi: 'KPIs',
+    notifications: 'Notifications',
   }[tab] || 'All onboardings'
 
   if (editing) {
@@ -853,14 +899,24 @@ export default function EdiDashboard({
 
   const headerNav = (
     <div className="edi-tabs header-tabs" role="tablist">
-      {[['board', 'Onboardings'], ['mine', 'My Assignment'], ['team', 'Team'], ['calendar', 'Kickoff'], ['kpi', 'KPIs']].map(([value, label]) => (
+      {[
+        ['board', 'Onboardings'],
+        ['mine', 'My Assignment'],
+        ['team', 'Team'],
+        ['calendar', 'Kickoff'],
+        ['kpi', 'KPIs'],
+        ['notifications', unreadCount > 0 ? `Notifications (${unreadCount})` : 'Notifications'],
+      ].map(([value, label]) => (
         <button
           key={value}
           type="button"
           role="tab"
           aria-selected={tab === value}
-          className={`secondary edi-tab${tab === value ? ' active' : ''}`}
-          onClick={() => setTab(value)}
+          className={`secondary edi-tab${tab === value ? ' active' : ''}${value === 'notifications' && unreadCount > 0 ? ' has-unread' : ''}`}
+          onClick={() => {
+            setTab(value)
+            if (value === 'notifications') refreshNotifications()
+          }}
         >
           {label}
         </button>
@@ -1083,6 +1139,40 @@ export default function EdiDashboard({
           <KpiTab items={items} onOpen={setOpenId} />
         )}
 
+        {tab === 'notifications' && !loading && (
+          <section className="card">
+            <div className="dash-top">
+              <div>
+                <h3 className="dash-title">Mentions</h3>
+                <p className="intro">When a teammate @mentions you in an internal note, it shows up here.</p>
+              </div>
+              {unreadCount > 0 && (
+                <button type="button" className="secondary status-edit" onClick={markAllNotificationsRead}>
+                  Mark all read
+                </button>
+              )}
+            </div>
+            {notifications.length === 0 ? (
+              <p className="intro">No notifications yet.</p>
+            ) : (
+              <ul className="notification-list">
+                {notifications.map((item) => (
+                  <li key={item.id} className={item.readAt ? '' : 'unread'}>
+                    <button type="button" className="notification-item" onClick={() => openNotification(item)}>
+                      <strong>{item.companyName}</strong>
+                      <span>{item.actorName} mentioned you</span>
+                      {item.noteExcerpt && <em>{item.noteExcerpt}</em>}
+                      <span className="notification-time">
+                        {item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
       </main>
       {open && createPortal(
         <div className="edi-detail" role="dialog" aria-modal="true" aria-label={`${open.company} onboarding`}>
@@ -1140,19 +1230,20 @@ export default function EdiDashboard({
             </label>
             <label className="field">
               <span>Internal note</span>
-              <textarea
-                rows={3}
+              <MentionNote
                 value={open.note}
-                placeholder="Only the EDI team sees this"
+                team={team}
+                selfId={profile?.id || ''}
                 disabled={busyId === open.id}
-                onChange={(event) => {
-                  const note = event.target.value
+                onChange={(note) => {
                   setRecords((current) => current.map((item) => (
                     item.id === open.id ? { ...item, ediNote: note } : item
                   )))
                 }}
-                onBlur={(event) => {
-                  persistEdi(open.id, { ediNote: event.target.value }).catch(() => {})
+                onCommit={(note) => {
+                  persistEdi(open.id, { ediNote: note })
+                    .then(() => refreshNotifications())
+                    .catch(() => {})
                 }}
               />
             </label>
