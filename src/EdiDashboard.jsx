@@ -1143,8 +1143,8 @@ export default function EdiDashboard({
           <section className="card">
             <div className="dash-top">
               <div>
-                <h3 className="dash-title">Mentions</h3>
-                <p className="intro">When a teammate @mentions you in an internal note, it shows up here.</p>
+                <h3 className="dash-title">Notifications</h3>
+                <p className="intro">Mentions, assignments, and unassignments from your teammates.</p>
               </div>
               {unreadCount > 0 && (
                 <button type="button" className="secondary status-edit" onClick={markAllNotificationsRead}>
@@ -1156,18 +1156,25 @@ export default function EdiDashboard({
               <p className="intro">No notifications yet.</p>
             ) : (
               <ul className="notification-list">
-                {notifications.map((item) => (
-                  <li key={item.id} className={item.readAt ? '' : 'unread'}>
-                    <button type="button" className="notification-item" onClick={() => openNotification(item)}>
-                      <strong>{item.companyName}</strong>
-                      <span>{item.actorName} mentioned you</span>
-                      {item.noteExcerpt && <em>{item.noteExcerpt}</em>}
-                      <span className="notification-time">
-                        {item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}
-                      </span>
-                    </button>
-                  </li>
-                ))}
+                {notifications.map((item) => {
+                  const action = item.kind === 'assigned'
+                    ? `${item.actorName} assigned you`
+                    : item.kind === 'unassigned'
+                      ? `${item.actorName} unassigned you`
+                      : `${item.actorName} mentioned you`
+                  return (
+                    <li key={item.id} className={item.readAt ? '' : 'unread'}>
+                      <button type="button" className="notification-item" onClick={() => openNotification(item)}>
+                        <strong>{item.companyName}</strong>
+                        <span>{action}</span>
+                        {item.noteExcerpt && <em>{item.noteExcerpt}</em>}
+                        <span className="notification-time">
+                          {item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </section>

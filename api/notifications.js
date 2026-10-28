@@ -81,6 +81,7 @@ function personLabel(row) {
 }
 
 function toNotification(row) {
+  const kind = ['mention', 'assigned', 'unassigned'].includes(row.kind) ? row.kind : 'mention'
   return {
     id: row.id,
     recipientId: row.recipient_id,
@@ -88,6 +89,7 @@ function toNotification(row) {
     actorName: personLabel(row.actor),
     onboardingId: row.onboarding_id,
     companyName: row.onboarding?.company_name || '—',
+    kind,
     noteExcerpt: row.note_excerpt || '',
     readAt: row.read_at ? new Date(row.read_at).getTime() : null,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : null,
@@ -101,7 +103,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const rows = await supabase(
         `edi_notification?recipient_id=eq.${encodeURIComponent(user.id)}`
-          + '&select=id,recipient_id,actor_id,onboarding_id,note_excerpt,read_at,created_at'
+          + '&select=id,recipient_id,actor_id,onboarding_id,kind,note_excerpt,read_at,created_at'
           + '&order=created_at.desc'
           + '&limit=100',
       )
@@ -146,7 +148,7 @@ export default async function handler(req, res) {
       for (const id of ids) {
         const rows = await supabase(
           `edi_notification?id=eq.${encodeURIComponent(id)}&recipient_id=eq.${encodeURIComponent(user.id)}`
-            + '&select=id,recipient_id,actor_id,onboarding_id,note_excerpt,read_at,created_at',
+            + '&select=id,recipient_id,actor_id,onboarding_id,kind,note_excerpt,read_at,created_at',
           { method: 'PATCH', body: { read_at: now } },
         )
         if (rows?.[0]) updated.push(toNotification(rows[0]))

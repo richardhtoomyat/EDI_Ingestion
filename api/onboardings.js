@@ -417,14 +417,17 @@ export default async function handler(req, res) {
           updated_at: new Date().toISOString(),
           ...readyAtPatch(existing),
         }
+        let ownerChange = null
         if (ediOwnerId !== undefined) {
           const nextOwner = String(ediOwnerId || '').trim() || null
-          const ownerChanged = (existing.edi_owner_id || null) !== nextOwner
+          const previousOwner = existing.edi_owner_id || null
+          const ownerChanged = previousOwner !== nextOwner
           body.edi_owner_id = nextOwner
           if (nextOwner && !existing.assigned_at) body.assigned_at = new Date().toISOString()
           if (ownerChanged && ediBucketOrder === undefined) {
             body.edi_bucket_order = await nextBucketOrder(nextOwner)
           }
+          if (ownerChanged) ownerChange = { previousOwner, nextOwner }
         }
         if (ediBucketOrder !== undefined) {
           const order = Number(ediBucketOrder)
@@ -491,28 +494,41 @@ export default async function handler(req, res) {
           method: 'PATCH',
           body,
         })
-        if (ediNote !== undefined) {
-          try {
+        try {
+          const notify = async (recipientId, kind, excerpt = '') => {
+            if (!recipientId || recipientId === user.id) return
+            await supabase('edi_notification', {
+              method: 'POST',
+              body: {
+                recipient_id: recipientId,
+                actor_id: user.id,
+                onboarding_id: id,
+                kind,
+                note_excerpt: excerpt,
+              },
+              prefer: 'return=minimal',
+            })
+          }
+          if (ownerChange) {
+            if (ownerChange.previousOwner) {
+              await notify(ownerChange.previousOwner, 'unassigned')
+            }
+            if (ownerChange.nextOwner) {
+              await notify(ownerChange.nextOwner, 'assigned')
+            }
+          }
+          if (ediNote !== undefined) {
             const teamRows = await supabase(
               'profiles?role=eq.edi&select=id,email,first_name,last_name',
             )
             const mentioned = newlyMentionedIds(previousNote, body.edi_note, teamRows || [], user.id)
             const excerpt = noteExcerpt(body.edi_note)
             for (const recipientId of mentioned) {
-              await supabase('edi_notification', {
-                method: 'POST',
-                body: {
-                  recipient_id: recipientId,
-                  actor_id: user.id,
-                  onboarding_id: id,
-                  note_excerpt: excerpt,
-                },
-                prefer: 'return=minimal',
-              })
+              await notify(recipientId, 'mention', excerpt)
             }
-          } catch {
-            // Note save should succeed even if notifications table is missing.
           }
+        } catch {
+          // Assignment/note save should succeed even if notifications table is missing.
         }
         return res.status(200).json({ ok: true, record: toRecord({ ...rows[0], onboarding_at7_code: existing.onboarding_at7_code }) })
       }
