@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { slotUnderCard } from './teamCardDrag.js'
+import { layoutRect, slotUnderCard } from './teamCardDrag.js'
 
 const slots = [
   { id: 'a', left: 0, top: 0, right: 240, bottom: 420 },
@@ -24,5 +24,29 @@ describe('slotUnderCard', () => {
 
   it('can move across more than one slot to the right', () => {
     expect(slotUnderCard(slots, { id: 'a', left: 450, top: 0, width: 240, height: 420 })).toBe('c')
+  })
+
+  it('still finds a shorter neighbor when the dragged column is much taller', () => {
+    const row = [
+      { id: 'a', left: 0, top: 0, right: 240, bottom: 800 },
+      { id: 'b', left: 252, top: 0, right: 492, bottom: 180 },
+    ]
+    expect(slotUnderCard(row, { id: 'a', left: 160, top: 0, width: 240, height: 800 })).toBe('b')
+  })
+})
+
+describe('layoutRect', () => {
+  it('copies rectangle fields that live on the prototype, like a DOMRect', () => {
+    const proto = {}
+    Object.defineProperties(proto, {
+      left: { get() { return 10 } },
+      top: { get() { return 20 } },
+      width: { get() { return 30 } },
+      height: { get() { return 40 } },
+      right: { get() { return 40 } },
+      bottom: { get() { return 60 } },
+    })
+    const box = layoutRect(Object.create(proto), 'none')
+    expect({ ...box }).toEqual({ left: 10, top: 20, width: 30, height: 40, right: 40, bottom: 60 })
   })
 })
