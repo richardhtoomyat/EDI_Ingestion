@@ -91,7 +91,7 @@ function Dashboard({
       onAdministration={onAdministration}
       currentWorkplace={currentWorkplace}
     >
-      <main className="page">
+      <main className="page edi-page">
         <div className="dash-top">
           <h2 className="dash-title">Onboardings</h2>
           <div className="actions">
@@ -375,7 +375,7 @@ export function CreateOnboarding({
 
   return (
     <Shell {...salesShellProps(account)}>
-      <main className="page">
+      <main className="page edi-page">
         <form onSubmit={submit} noValidate>
           <section className="card">
             <h2>{record ? 'Edit onboarding' : 'New customer onboarding'}</h2>
@@ -769,7 +769,7 @@ function AgentReview({
     <Shell {...salesShellProps({
       profile, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
     })}>
-      <main className="page">
+      <main className="page edi-page">
         <div className="banner ok no-print">Review the onboarding details, then create it.</div>
         {error && <div className="banner err" role="alert">{error}</div>}
         <ReviewSummary draft={draft} />
@@ -821,7 +821,7 @@ function Created({
     <Shell {...salesShellProps({
       profile, onSignOut, onAccount, onSwitchWorkplace, onAdministration, currentWorkplace,
     })}>
-      <main className="page">
+      <main className="page edi-page">
         <div className="banner ok no-print">Created</div>
         <section className="card no-print">
           <h2>Created</h2>
@@ -850,7 +850,7 @@ function Created({
 export function InvalidLink() {
   return (
     <Shell>
-      <main className="page">
+      <main className="page edi-page">
         <section className="card">
           <h2>This link is not valid</h2>
           <p className="intro">Ask your Day & Ross sales agent for a new onboarding link.</p>
