@@ -8,17 +8,13 @@ const slots = [
 ]
 
 describe('slotUnderCard', () => {
-  it('does not move while the midpoint is still in its own slot', () => {
+  it('does not move while the card center is still in its own slot', () => {
     expect(slotUnderCard(slots, { id: 'a', left: 0, top: 0, width: 240, height: 420 })).toBe('')
   })
 
-  it('does not move just because the card edge overlaps the next slot', () => {
-    // Right edge reaches B, but the midpoint (x = 200) is still left of B.
-    expect(slotUnderCard(slots, { id: 'a', left: 80, top: 0, width: 240, height: 420 })).toBe('')
-  })
-
-  it('moves right once the midpoint enters the next slot, even if the pointer is still over the gap', () => {
-    // Midpoint is x = 320, inside B. A left-side grab would still have the pointer over A's gap.
+  it('moves right once the card center enters the next slot, even if the pointer is still over the gap', () => {
+    // Grabbed near the left edge. Pointer is at 210, still inside A's gap (0–240),
+    // but the card body is centered over B.
     expect(slotUnderCard(slots, { id: 'a', left: 200, top: 0, width: 240, height: 420 })).toBe('b')
   })
 
@@ -30,12 +26,11 @@ describe('slotUnderCard', () => {
     expect(slotUnderCard(slots, { id: 'a', left: 450, top: 0, width: 240, height: 420 })).toBe('c')
   })
 
-  it('uses the column under the midpoint when that neighbor is shorter than the crosshair', () => {
+  it('still finds a shorter neighbor when the dragged column is much taller', () => {
     const row = [
       { id: 'a', left: 0, top: 0, right: 240, bottom: 800 },
       { id: 'b', left: 252, top: 0, right: 492, bottom: 180 },
     ]
-    // Midpoint is (280, 400), below B, but B is the column that contains x = 280.
     expect(slotUnderCard(row, { id: 'a', left: 160, top: 0, width: 240, height: 800 })).toBe('b')
   })
 })
