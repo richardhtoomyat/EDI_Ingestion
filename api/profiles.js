@@ -92,9 +92,9 @@ function toProfile(row) {
   }
 }
 
-function parseTeamViewOrder(value) {
+function parseIdList(value) {
   if (!Array.isArray(value)) return []
-  return value.map((id) => String(id || '').trim()).filter(Boolean)
+  return [...new Set(value.map((id) => String(id || '').trim()).filter(Boolean))]
 }
 
 function sortByTeamViewOrder(profiles, orderIds) {
@@ -113,19 +113,27 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'PATCH') {
       const { user } = await requireRole(req, ['edi', 'admin'])
-      const teamViewOrder = Array.isArray(req.body?.teamViewOrder) ? req.body.teamViewOrder : null
-      if (!teamViewOrder) {
-        return res.status(400).json({ ok: false, error: 'teamViewOrder is required' })
+      const hasOrder = Array.isArray(req.body?.teamViewOrder)
+      const hasHidden = Array.isArray(req.body?.teamHidden)
+      if (!hasOrder && !hasHidden) {
+        return res.status(400).json({ ok: false, error: 'teamViewOrder or teamHidden is required' })
       }
-      const order = parseTeamViewOrder(teamViewOrder)
-      await supabase(
-        `profiles?id=eq.${encodeURIComponent(user.id)}&select=id`,
+      const patch = {}
+      if (hasOrder) patch.edi_team_view_order = parseIdList(req.body.teamViewOrder)
+      if (hasHidden) patch.edi_team_hidden = parseIdList(req.body.teamHidden)
+      const rows = await supabase(
+        `profiles?id=eq.${encodeURIComponent(user.id)}&select=id,edi_team_view_order,edi_team_hidden`,
         {
           method: 'PATCH',
-          body: { edi_team_view_order: order },
+          body: patch,
         },
       )
-      return res.status(200).json({ ok: true, teamViewOrder: order })
+      const saved = rows?.[0] || {}
+      return res.status(200).json({
+        ok: true,
+        teamViewOrder: parseIdList(saved.edi_team_view_order ?? patch.edi_team_view_order),
+        teamHidden: parseIdList(saved.edi_team_hidden ?? patch.edi_team_hidden),
+      })
     }
 
     if (req.method !== 'GET') {
@@ -157,18 +165,20 @@ export default async function handler(req, res) {
         'profiles?role=eq.edi&select=id,email,first_name,last_name,role,created_at&order=first_name.asc,last_name.asc',
       ),
       supabase(
-        `profiles?id=eq.${encodeURIComponent(user.id)}&select=edi_team_view_order`,
+        `profiles?id=eq.${encodeURIComponent(user.id)}&select=edi_team_view_order,edi_team_hidden`,
       ),
     ])
-    const teamViewOrder = parseTeamViewOrder(viewerRows?.[0]?.edi_team_view_order)
+    const teamViewOrder = parseIdList(viewerRows?.[0]?.edi_team_view_order)
+    const teamHidden = parseIdList(viewerRows?.[0]?.edi_team_hidden)
     const profiles = sortByTeamViewOrder((rows || []).map(toProfile), teamViewOrder)
     return res.status(200).json({
       ok: true,
       profiles,
       teamViewOrder,
+      teamHidden,
     })
   } catch (error) {
-    const missing = error.code === 'PGRST205' || /profiles|edi_team_view_order|edi_team_order/i.test(error.message || '')
+    const missing = error.code === 'PGRST205' || /profiles|edi_team_view_order|edi_team_hidden|edi_team_order/i.test(error.message || '')
     return res.status(missing && error.status !== 401 && error.status !== 403 ? 503 : error.status || 500).json({
       ok: false,
       error: missing && error.status !== 401 && error.status !== 403

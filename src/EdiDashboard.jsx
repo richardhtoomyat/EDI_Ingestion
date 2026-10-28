@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Shell } from './chrome.jsx'
 import { CreateOnboarding } from './AgentApp.jsx'
 import {
-  emptyDeveloper, loadEdiTeam, loadOnboardings, reorderEdiBucket, reorderEdiTeam, updateEdiAssignment,
+  emptyDeveloper, loadEdiTeam, loadOnboardings, reorderEdiBucket, updateEdiTeamView, updateEdiAssignment,
 } from './onboardingLink.js'
 
 const LONG_PRESS_MS = 420
@@ -420,6 +420,7 @@ export default function EdiDashboard({
   const [tab, setTab] = useState('board')
   const [records, setRecords] = useState([])
   const [team, setTeam] = useState([])
+  const [teamHidden, setTeamHidden] = useState([])
   const [loadError, setLoadError] = useState('')
   const [saveError, setSaveError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -484,7 +485,8 @@ export default function EdiDashboard({
       .then(([nextRecords, nextTeam]) => {
         if (cancel) return
         setRecords(nextRecords)
-        setTeam(nextTeam)
+        setTeam(nextTeam.profiles || [])
+        setTeamHidden(nextTeam.teamHidden || [])
         setLoadError('')
       })
       .catch((error) => {
@@ -492,12 +494,29 @@ export default function EdiDashboard({
         setLoadError(error.message)
         setRecords([])
         setTeam([])
+        setTeamHidden([])
       })
       .finally(() => { if (!cancel) setLoading(false) })
     return () => { cancel = true }
   }, [])
 
   const items = useMemo(() => records.map(recordToItem), [records])
+  const hiddenSet = useMemo(() => new Set(teamHidden), [teamHidden])
+  const visibleTeam = useMemo(
+    () => team.filter((person) => !hiddenSet.has(person.id)),
+    [team, hiddenSet],
+  )
+  const hiddenTeam = useMemo(
+    () => team.filter((person) => hiddenSet.has(person.id)),
+    [team, hiddenSet],
+  )
+
+  const reloadTeam = () => loadEdiTeam()
+    .then((next) => {
+      setTeam(next.profiles || [])
+      setTeamHidden(next.teamHidden || [])
+    })
+    .catch(() => {})
   const sortBoard = (list) => [...list].sort((a, b) => {
     const phaseDiff = (a.phase?.order ?? 0) - (b.phase?.order ?? 0)
     if (phaseDiff !== 0) return phaseDiff
@@ -632,23 +651,46 @@ export default function EdiDashboard({
     }
   }
 
-  const persistTeamOrder = async (orderedTeam) => {
-    setTeam(orderedTeam)
+  const persistTeamOrder = async (orderedVisible) => {
+    const hidden = team.filter((person) => hiddenSet.has(person.id))
+    const nextTeam = [...orderedVisible, ...hidden]
+    setTeam(nextTeam)
     setSaveError('')
     try {
-      await reorderEdiTeam(orderedTeam.map((person) => person.id))
+      await updateEdiTeamView({ teamViewOrder: nextTeam.map((person) => person.id) })
     } catch (error) {
       setSaveError(error.message)
-      loadEdiTeam().then(setTeam).catch(() => {})
+      reloadTeam()
     }
+  }
+
+  const persistTeamHidden = async (nextHidden) => {
+    setTeamHidden(nextHidden)
+    setSaveError('')
+    try {
+      await updateEdiTeamView({ teamHidden: nextHidden })
+    } catch (error) {
+      setSaveError(error.message)
+      reloadTeam()
+    }
+  }
+
+  const hideTeamPerson = (personId) => {
+    if (!personId || hiddenSet.has(personId)) return
+    persistTeamHidden([...teamHidden, personId])
+  }
+
+  const showTeamPerson = (personId) => {
+    if (!personId || !hiddenSet.has(personId)) return
+    persistTeamHidden(teamHidden.filter((id) => id !== personId))
   }
 
   const reorderTeam = (draggedId, targetId) => {
     if (!draggedId || !targetId || draggedId === targetId) return
-    const from = team.findIndex((person) => person.id === draggedId)
-    const to = team.findIndex((person) => person.id === targetId)
+    const from = visibleTeam.findIndex((person) => person.id === draggedId)
+    const to = visibleTeam.findIndex((person) => person.id === targetId)
     if (from < 0 || to < 0) return
-    const next = [...team]
+    const next = [...visibleTeam]
     const [moved] = next.splice(from, 1)
     next.splice(to, 0, moved)
     persistTeamOrder(next)
@@ -892,84 +934,119 @@ export default function EdiDashboard({
 
         {tab === 'team' && !loading && (
           <div className="workbuckets-layout">
-            <div className="workbuckets">
-              {team.length === 0 && (
-                <section className="card">
-                  <p className="intro">No EDI accounts yet. Team members appear here after they create an account with the EDI role.</p>
-                </section>
+            <div className="workbuckets-main">
+              {hiddenTeam.length > 0 && (
+                <div className="team-hidden-bar">
+                  <span>Hidden</span>
+                  {hiddenTeam.map((person) => {
+                    const label = [person.firstName, person.lastName].filter(Boolean).join(' ') || person.email
+                    return (
+                      <button
+                        key={person.id}
+                        type="button"
+                        className="team-unhide"
+                        onClick={() => showTeamPerson(person.id)}
+                      >
+                        {label}
+                        <em>Show</em>
+                      </button>
+                    )
+                  })}
+                </div>
               )}
-              {team.map((person) => {
-                const bucket = sortBucket(items.filter((item) => item.ownerId === person.id))
-                const personArmed = armedPersonId === person.id
-                return (
-                  <section
-                    key={person.id}
-                    className={`card workbucket${dragOver === person.id ? ' over' : ''}${dragOverPerson === person.id ? ' person-target' : ''}${personArmed ? ' armed' : ''}`}
-                    draggable
-                    onPointerDown={(event) => {
-                      // Only arm from the header area, not from cards inside
-                      if (event.target.closest('.bucket-card')) return
-                      startLongPress(() => {
-                        armedPersonRef.current = person.id
-                        armedItemRef.current = ''
-                        setArmedPersonId(person.id)
-                        setArmedItemId('')
-                      })(event)
-                    }}
-                    onPointerUp={() => {
-                      cancelLongPress()
-                      if (dragKindRef.current !== 'person' && armedPersonRef.current === person.id) {
-                        setTimeout(() => {
-                          if (armedPersonRef.current === person.id && dragKindRef.current !== 'person') {
-                            armedPersonRef.current = ''
-                            setArmedPersonId('')
-                          }
-                        }, 0)
-                      }
-                    }}
-                    onPointerCancel={disarmAll}
-                    onContextMenu={(event) => {
-                      if (armedPersonRef.current === person.id || longPressTimer.current) event.preventDefault()
-                    }}
-                    onDragStart={(event) => {
-                      if (event.target.closest('.bucket-card')) {
-                        // Let the card handle its own drag; don't drag the column
-                        return
-                      }
-                      if (armedPersonRef.current !== person.id) {
-                        event.preventDefault()
-                        cancelLongPress()
-                        return
-                      }
-                      dragKindRef.current = 'person'
-                      event.dataTransfer.setData('text/plain', `${PERSON_PREFIX}${person.id}`)
-                      event.dataTransfer.effectAllowed = 'move'
-                    }}
-                    onDragEnd={() => {
-                      disarmAll()
-                      setDragOverPerson('')
-                      dragKindRef.current = ''
-                    }}
-                    onDragOver={(event) => {
-                      event.preventDefault()
-                      if (dragKindRef.current === 'person') {
-                        setDragOverPerson(person.id)
-                        return
-                      }
-                      setDragOver(person.id)
-                    }}
-                    onDragLeave={() => {
-                      setDragOver('')
-                      setDragOverItem('')
-                      setDragOverPerson((current) => (current === person.id ? '' : current))
-                    }}
-                    onDrop={onDropOwner(person.id)}
-                  >
-                    <h3>{[person.firstName, person.lastName].filter(Boolean).join(' ') || person.email}</h3>
-                    {bucket.map((item) => renderBucketCard(item, person.id))}
+              <div className="workbuckets">
+                {team.length === 0 && (
+                  <section className="card">
+                    <p className="intro">No EDI accounts yet. Team members appear here after they create an account with the EDI role.</p>
                   </section>
-                )
-              })}
+                )}
+                {visibleTeam.map((person) => {
+                  const bucket = sortBucket(items.filter((item) => item.ownerId === person.id))
+                  const personArmed = armedPersonId === person.id
+                  const label = [person.firstName, person.lastName].filter(Boolean).join(' ') || person.email
+                  return (
+                    <section
+                      key={person.id}
+                      className={`card workbucket${dragOver === person.id ? ' over' : ''}${dragOverPerson === person.id ? ' person-target' : ''}${personArmed ? ' armed' : ''}`}
+                      draggable
+                      onPointerDown={(event) => {
+                        // Only arm from the header area, not from cards / hide control
+                        if (event.target.closest('.bucket-card, .workbucket-hide')) return
+                        startLongPress(() => {
+                          armedPersonRef.current = person.id
+                          armedItemRef.current = ''
+                          setArmedPersonId(person.id)
+                          setArmedItemId('')
+                        })(event)
+                      }}
+                      onPointerUp={() => {
+                        cancelLongPress()
+                        if (dragKindRef.current !== 'person' && armedPersonRef.current === person.id) {
+                          setTimeout(() => {
+                            if (armedPersonRef.current === person.id && dragKindRef.current !== 'person') {
+                              armedPersonRef.current = ''
+                              setArmedPersonId('')
+                            }
+                          }, 0)
+                        }
+                      }}
+                      onPointerCancel={disarmAll}
+                      onContextMenu={(event) => {
+                        if (armedPersonRef.current === person.id || longPressTimer.current) event.preventDefault()
+                      }}
+                      onDragStart={(event) => {
+                        if (event.target.closest('.bucket-card, .workbucket-hide')) {
+                          return
+                        }
+                        if (armedPersonRef.current !== person.id) {
+                          event.preventDefault()
+                          cancelLongPress()
+                          return
+                        }
+                        dragKindRef.current = 'person'
+                        event.dataTransfer.setData('text/plain', `${PERSON_PREFIX}${person.id}`)
+                        event.dataTransfer.effectAllowed = 'move'
+                      }}
+                      onDragEnd={() => {
+                        disarmAll()
+                        setDragOverPerson('')
+                        dragKindRef.current = ''
+                      }}
+                      onDragOver={(event) => {
+                        event.preventDefault()
+                        if (dragKindRef.current === 'person') {
+                          setDragOverPerson(person.id)
+                          return
+                        }
+                        setDragOver(person.id)
+                      }}
+                      onDragLeave={() => {
+                        setDragOver('')
+                        setDragOverItem('')
+                        setDragOverPerson((current) => (current === person.id ? '' : current))
+                      }}
+                      onDrop={onDropOwner(person.id)}
+                    >
+                      <div className="workbucket-head">
+                        <h3>{label}</h3>
+                        <button
+                          type="button"
+                          className="workbucket-hide"
+                          aria-label={`Hide ${label}`}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            hideTeamPerson(person.id)
+                          }}
+                        >
+                          Hide
+                        </button>
+                      </div>
+                      {bucket.map((item) => renderBucketCard(item, person.id))}
+                    </section>
+                  )
+                })}
+              </div>
             </div>
             <section
               className={`card workbucket workbucket-unassigned${dragOver === 'none' ? ' over' : ''}`}

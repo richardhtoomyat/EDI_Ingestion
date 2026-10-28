@@ -182,18 +182,27 @@ export async function loadEdiTeam() {
   const response = await fetch('/api/profiles?role=edi', { headers: await authHeaders() })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(payload.error || 'Could not load EDI team')
-  return payload.profiles || []
+  return {
+    profiles: payload.profiles || [],
+    teamHidden: Array.isArray(payload.teamHidden) ? payload.teamHidden : [],
+  }
 }
 
-export async function reorderEdiTeam(teamViewOrder) {
+export async function updateEdiTeamView({ teamViewOrder, teamHidden } = {}) {
+  const body = {}
+  if (Array.isArray(teamViewOrder)) body.teamViewOrder = teamViewOrder
+  if (Array.isArray(teamHidden)) body.teamHidden = teamHidden
   const response = await fetch('/api/profiles', {
     method: 'PATCH',
     headers: await authHeaders(),
-    body: JSON.stringify({ teamViewOrder }),
+    body: JSON.stringify(body),
   })
   const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(payload.error || 'Could not save team order')
-  return payload.teamViewOrder || []
+  if (!response.ok) throw new Error(payload.error || 'Could not save team view')
+  return {
+    teamViewOrder: Array.isArray(payload.teamViewOrder) ? payload.teamViewOrder : [],
+    teamHidden: Array.isArray(payload.teamHidden) ? payload.teamHidden : [],
+  }
 }
 
 export async function loadOrganization() {

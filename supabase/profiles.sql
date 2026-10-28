@@ -5,6 +5,7 @@ create table public.profiles (
   last_name text not null,
   role text not null check (role in ('sale', 'edi', 'coordinator', 'admin')),
   edi_team_view_order jsonb not null default '[]'::jsonb,
+  edi_team_hidden jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
 
