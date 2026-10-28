@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Shell } from './chrome.jsx'
 import { CreateOnboarding } from './AgentApp.jsx'
@@ -10,6 +10,42 @@ import {
 
 const LONG_PRESS_MS = 420
 const PERSON_PREFIX = 'person:'
+const SHUFFLE_EASE = 'cubic-bezier(.22,1,.36,1)'
+
+function playCardShuffle(board, before) {
+  if (!board || !before?.size) return
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const nodes = [...board.querySelectorAll('[data-person-id]')]
+  nodes.forEach((node) => {
+    node.style.transition = 'none'
+    node.style.transform = 'none'
+  })
+  board.getBoundingClientRect()
+  const moving = []
+  nodes.forEach((node) => {
+    const first = before.get(node.getAttribute('data-person-id'))
+    if (!first) return
+    const last = node.getBoundingClientRect()
+    const dx = first.left - last.left
+    const dy = first.top - last.top
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return
+    node.style.transform = `translate(${dx}px, ${dy}px)`
+    node.style.zIndex = '2'
+    moving.push(node)
+  })
+  board.getBoundingClientRect()
+  moving.forEach((node) => {
+    node.style.transition = `transform 340ms ${SHUFFLE_EASE}`
+    node.style.transform = ''
+    const clear = (event) => {
+      if (event.propertyName !== 'transform') return
+      node.style.transition = ''
+      node.style.zIndex = ''
+      node.removeEventListener('transitionend', clear)
+    }
+    node.addEventListener('transitionend', clear)
+  })
+}
 
 function readDragPayload(dataTransfer) {
   const plain = dataTransfer.getData('text/plain') || ''
@@ -450,6 +486,8 @@ export default function EdiDashboard({
   const teamOrderDirtyRef = useRef(false)
   const teamRef = useRef([])
   const teamHiddenRef = useRef([])
+  const workbucketsRef = useRef(null)
+  const flipFromRef = useRef(null)
   const firstName = profile?.firstName || ''
   const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
 
@@ -527,6 +565,13 @@ export default function EdiDashboard({
   const hiddenSet = useMemo(() => new Set(teamHidden), [teamHidden])
   teamRef.current = team
   teamHiddenRef.current = teamHidden
+
+  useLayoutEffect(() => {
+    const before = flipFromRef.current
+    flipFromRef.current = null
+    if (!before) return
+    playCardShuffle(workbucketsRef.current, before)
+  }, [team])
   const visibleTeam = useMemo(
     () => team.filter((person) => !hiddenSet.has(person.id)),
     [team, hiddenSet],
@@ -719,6 +764,14 @@ export default function EdiDashboard({
     const [moved] = nextVisible.splice(from, 1)
     nextVisible.splice(to, 0, moved)
     const nextTeam = [...nextVisible, ...hidden]
+    const board = workbucketsRef.current
+    if (board) {
+      const before = new Map()
+      board.querySelectorAll('[data-person-id]').forEach((node) => {
+        before.set(node.getAttribute('data-person-id'), node.getBoundingClientRect())
+      })
+      flipFromRef.current = before
+    }
     teamRef.current = nextTeam
     teamOrderDirtyRef.current = true
     setTeam(nextTeam)
@@ -1051,7 +1104,7 @@ export default function EdiDashboard({
                   </div>
                 )}
               </div>
-              <div className="workbuckets">
+              <div className="workbuckets" ref={workbucketsRef}>
                 {team.length === 0 && (
                   <section className="card">
                     <p className="intro">No EDI accounts yet. Team members appear here after they create an account with the EDI role.</p>
@@ -1064,6 +1117,7 @@ export default function EdiDashboard({
                   return (
                     <section
                       key={person.id}
+                      data-person-id={person.id}
                       className={`card workbucket${dragOver === person.id ? ' over' : ''}${dragOverPerson === person.id ? ' person-target' : ''}${personArmed ? ' armed' : ''}`}
                       draggable
                       onPointerDown={(event) => {
