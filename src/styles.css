@@ -15,7 +15,7 @@ body { margin: 0; background: #fff; font-size: 16px; line-height: 1.5; -webkit-f
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
-/* header / footer — shell fills viewport so footer stays at the bottom */
+/* header / shell fills viewport */
 .app-shell {
   min-height: 100%;
   min-height: 100dvh;
@@ -46,10 +46,6 @@ button.header-signout:active {
   box-shadow: none;
 }
 .logo { height: 36px; width: auto; display: block; }
-.site-footer { background: var(--black); color: #fff; padding: 28px 20px; text-align: center; font-size: .85rem; flex-shrink: 0; margin-top: auto; width: 100%; }
-.site-footer p { margin: 4px 0; }
-.site-footer a { color: var(--orange); }
-
 /* hero */
 .hero { background: linear-gradient(120deg, #111 0%, #2b1a12 55%, #7a3a18 100%); color: #fff; text-align: center; padding: 56px 20px 48px; }
 .hero-inner { max-width: 900px; margin: 0 auto; }

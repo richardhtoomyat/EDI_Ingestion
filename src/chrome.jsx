@@ -42,15 +42,6 @@ export function SiteHeader({
   )
 }
 
-export function SiteFooter() {
-  return (
-    <footer className="site-footer no-print">
-      <p>Questions? Contact <a href={`mailto:${EDI_EMAIL}`}>{EDI_EMAIL}</a></p>
-      <p>© Day & Ross. All rights reserved.</p>
-    </footer>
-  )
-}
-
 export function Shell({
   title,
   subtitle,
@@ -77,7 +68,6 @@ export function Shell({
         nav={nav}
       />
       <div className="app-shell-body">{children}</div>
-      <SiteFooter />
     </div>
   )
 }
