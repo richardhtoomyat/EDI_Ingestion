@@ -345,7 +345,7 @@ export default function AuthGate() {
   if (screen === 'account' && profile) {
     return (
       <Shell
-        title="Account"
+        title="Settings"
         subtitle={profile.firstName ? `Welcome, ${profile.firstName}` : ''}
         {...portalAccountProps}
       >
@@ -357,7 +357,6 @@ export default function AuthGate() {
             setLastName(next.lastName)
           }}
           onBack={() => setScreen(accountReturn || screenForRole(profile.role))}
-          onSignOut={handleSignOut}
         />
       </Shell>
     )

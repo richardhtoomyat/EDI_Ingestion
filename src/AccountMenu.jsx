@@ -144,7 +144,7 @@ export function AccountMenu({
                 onAccount?.()
               }}
             >
-              Account
+              Settings
             </button>
             {admin && (
               <>
@@ -251,7 +251,7 @@ export function AccountMenu({
   )
 }
 
-export function AccountPage({ profile, onSaved, onBack, onSignOut }) {
+export function AccountPage({ profile, onSaved, onBack }) {
   const [firstName, setFirstName] = useState(profile?.firstName || '')
   const [lastName, setLastName] = useState(profile?.lastName || '')
   const [error, setError] = useState('')
@@ -277,7 +277,7 @@ export function AccountPage({ profile, onSaved, onBack, onSignOut }) {
       onSaved?.(next)
       setSaved(true)
     } catch (err) {
-      setError(err.message || 'Could not save your account.')
+      setError(err.message || 'Could not save your settings.')
     } finally {
       setBusy(false)
     }
@@ -292,31 +292,50 @@ export function AccountPage({ profile, onSaved, onBack, onSignOut }) {
         : 'EDI'
 
   return (
-    <main className="page login-wrap">
-      <form className="card login-card account-card" onSubmit={submit} noValidate>
+    <main className="settings-page">
+      <aside className="settings-nav">
+        <div className="settings-identity">
+          <span className="settings-avatar" aria-hidden="true">{initials(profile)}</span>
+          <div>
+            <strong>{displayName(profile)}</strong>
+            <span>{profile?.email || ''}</span>
+            <small>{roleLabel}</small>
+          </div>
+        </div>
+        <nav aria-label="Settings">
+          <button type="button" className="settings-tab active" aria-current="page">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path fill="currentColor" d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-5 6.2c0-2.2 2.2-3.7 5-3.7s5 1.5 5 3.7V15H3v-.8Z" />
+            </svg>
+            Account
+          </button>
+        </nav>
+      </aside>
+      <form className="settings-panel" onSubmit={submit} noValidate>
         <h2>Account</h2>
-        <p className="intro">Update your name. Email and role stay the same.</p>
         {error && <div className="banner err" role="alert">{error}</div>}
-        {saved && !error && <div className="banner ok" role="status">Account saved.</div>}
+        {saved && !error && <div className="banner ok" role="status">Settings saved.</div>}
+        <label className="field">
+          <span>First name</span>
+          <input value={firstName} autoComplete="given-name" required onChange={(event) => setFirstName(event.target.value)} />
+          <small>Shown when teammates see your name.</small>
+        </label>
+        <label className="field">
+          <span>Last name</span>
+          <input value={lastName} autoComplete="family-name" required onChange={(event) => setLastName(event.target.value)} />
+        </label>
         <label className="field">
           <span>Email</span>
           <input value={profile?.email || ''} readOnly />
+          <small>Used to sign in. This cannot be changed here.</small>
         </label>
         <label className="field">
           <span>Role</span>
           <input value={roleLabel} readOnly />
-        </label>
-        <label className="field">
-          <span>First name <b className="req"> *</b></span>
-          <input value={firstName} autoComplete="given-name" required onChange={(event) => setFirstName(event.target.value)} />
-        </label>
-        <label className="field">
-          <span>Last name <b className="req"> *</b></span>
-          <input value={lastName} autoComplete="family-name" required onChange={(event) => setLastName(event.target.value)} />
+          <small>Assigned for this workspace.</small>
         </label>
         <div className="actions">
           <button type="button" className="secondary" disabled={busy} onClick={onBack}>Back</button>
-          <button type="button" className="secondary" disabled={busy} onClick={onSignOut}>Sign out</button>
           <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
         </div>
       </form>
