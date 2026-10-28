@@ -55,21 +55,6 @@ export async function signInWithPassword(email, password) {
   return data
 }
 
-export async function createAccount({ email, password, firstName, lastName }) {
-  const { data, error } = await supabase.auth.signUp({
-    email: email.trim(),
-    password,
-    options: {
-      data: {
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-      },
-    },
-  })
-  if (error) throw error
-  return data
-}
-
 export async function signOut() {
   const { error } = await supabase.auth.signOut()
   if (error) throw error

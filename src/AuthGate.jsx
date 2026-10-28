@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Shell, Chevron } from './chrome.jsx'
+import logo from './assets/logo.png'
 import { AccountPage, AdministrationPage, isAdminProfile } from './AccountMenu.jsx'
 import AgentApp from './AgentApp.jsx'
 import CoordinatorPage from './CoordinatorPage.jsx'
@@ -9,7 +10,6 @@ const WORKPLACE_KEY = 'edi-workplace'
 const WORKPLACES = ['sale', 'edi', 'coordinator']
 import {
   authConfigured,
-  createAccount,
   getProfile,
   isDayrossEmail,
   namesFromUser,
@@ -43,53 +43,54 @@ function TextField({ label, value, onChange, type = 'text', required, autoComple
   )
 }
 
-function SignInCard({ error, busy, onMicrosoft, onSignIn, onCreate }) {
-  const [mode, setMode] = useState('signIn')
+function MicrosoftMark() {
+  return (
+    <svg className="ms-mark" width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  )
+}
+
+function SignInCard({ error, busy, onMicrosoft, onSignIn }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
 
   const submit = (event) => {
     event.preventDefault()
-    if (mode === 'create') {
-      onCreate({ email, password, firstName, lastName })
-      return
-    }
     onSignIn({ email, password })
   }
 
   return (
-    <Shell title="Sign in">
-      <main className="page login-wrap">
-        <div className="card login-card auth-card">
+    <div className="signin">
+      <section className="signin-brand">
+        <img className="signin-logo" src={logo} alt="Day & Ross" />
+        <div className="signin-brand-copy">
+          <p className="signin-kicker">Day &amp; Ross</p>
+          <h1>EDI<span>Conveyor</span></h1>
+          <p className="signin-lead">From the first customer request to production EDI.</p>
+        </div>
+      </section>
+      <main className="signin-panel">
+        <form className="signin-form" onSubmit={submit} noValidate>
           <h2>Sign in</h2>
-          <p className="intro">Use your Day & Ross Microsoft account, or create an account on this page.</p>
+          <p className="intro">Use your Day &amp; Ross Microsoft account, or sign in with email.</p>
           {error && <div className="banner err" role="alert">{error}</div>}
           <button type="button" className="ms-btn" disabled={busy} onClick={onMicrosoft}>
+            <MicrosoftMark />
             Sign in with Microsoft
           </button>
-          <div className="auth-divider"><span>or</span></div>
-          <div className="auth-tabs" role="tablist">
-            <button type="button" role="tab" aria-selected={mode === 'signIn'} className={mode === 'signIn' ? 'active' : ''} onClick={() => setMode('signIn')}>Sign in</button>
-            <button type="button" role="tab" aria-selected={mode === 'create'} className={mode === 'create' ? 'active' : ''} onClick={() => setMode('create')}>Create account</button>
+          <div className="auth-divider"><span>or email</span></div>
+          <TextField label="Email" type="email" value={email} onChange={setEmail} required autoComplete="email" />
+          <TextField label="Password" type="password" value={password} onChange={setPassword} required autoComplete="current-password" />
+          <div className="actions">
+            <button type="submit" disabled={busy}>Sign in <Chevron /></button>
           </div>
-          <form onSubmit={submit} noValidate>
-            {mode === 'create' && (
-              <>
-                <TextField label="First name" value={firstName} onChange={setFirstName} required autoComplete="given-name" />
-                <TextField label="Last name" value={lastName} onChange={setLastName} required autoComplete="family-name" />
-              </>
-            )}
-            <TextField label="Email" type="email" value={email} onChange={setEmail} required autoComplete="email" />
-            <TextField label="Password" type="password" value={password} onChange={setPassword} required autoComplete={mode === 'create' ? 'new-password' : 'current-password'} />
-            <div className="actions">
-              <button type="submit" disabled={busy}>{mode === 'create' ? 'Create account' : 'Sign in'} <Chevron /></button>
-            </div>
-          </form>
-        </div>
+        </form>
       </main>
-    </Shell>
+    </div>
   )
 }
 
@@ -279,27 +280,6 @@ export default function AuthGate() {
     }
   }
 
-  const handleCreate = async ({ email, password, firstName: first, lastName: last }) => {
-    if (!first.trim() || !last.trim()) {
-      setError('Enter your first and last name.')
-      return
-    }
-    setBusy(true)
-    setError('')
-    try {
-      const data = await createAccount({ email, password, firstName: first, lastName: last })
-      setFirstName(first.trim())
-      setLastName(last.trim())
-      if (!data.session) {
-        setError('Account created. Confirm email is still required in Supabase Auth, so turn that off for this prototype, then sign in.')
-      }
-    } catch (err) {
-      setError(err.message || 'Could not create the account.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const handleSaveRole = async (role) => {
     if (!session?.user) return
     if (!firstName.trim() || !lastName.trim()) {
@@ -477,7 +457,6 @@ export default function AuthGate() {
       busy={busy}
       onMicrosoft={handleMicrosoft}
       onSignIn={handleSignIn}
-      onCreate={handleCreate}
     />
   )
 }
