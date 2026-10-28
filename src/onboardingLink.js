@@ -185,15 +185,15 @@ export async function loadEdiTeam() {
   return payload.profiles || []
 }
 
-export async function reorderEdiTeam(teamOrders) {
+export async function reorderEdiTeam(teamViewOrder) {
   const response = await fetch('/api/profiles', {
     method: 'PATCH',
     headers: await authHeaders(),
-    body: JSON.stringify({ teamOrders }),
+    body: JSON.stringify({ teamViewOrder }),
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(payload.error || 'Could not save team order')
-  return payload.profiles || []
+  return payload.teamViewOrder || []
 }
 
 export async function loadOrganization() {

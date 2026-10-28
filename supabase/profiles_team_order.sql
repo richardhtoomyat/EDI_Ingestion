@@ -1,10 +1,8 @@
--- Persist EDI Team tab column order (lower = further left).
+-- Per-login Team tab column order (viewer preference, not shared).
 -- Run in the Supabase SQL editor.
 
 alter table public.profiles
-  add column if not exists edi_team_order integer not null default 0;
+  add column if not exists edi_team_view_order jsonb not null default '[]'::jsonb;
 
-create index if not exists profiles_edi_team_order_idx
-  on public.profiles (role, edi_team_order);
-
-comment on column public.profiles.edi_team_order is 'Display order of EDI workbuckets on the Team tab';
+comment on column public.profiles.edi_team_view_order is
+  'Ordered list of EDI profile ids for this user''s Team tab layout';

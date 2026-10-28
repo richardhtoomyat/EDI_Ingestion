@@ -633,14 +633,10 @@ export default function EdiDashboard({
   }
 
   const persistTeamOrder = async (orderedTeam) => {
-    const teamOrders = orderedTeam.map((person, index) => ({
-      id: person.id,
-      ediTeamOrder: index,
-    }))
-    setTeam(orderedTeam.map((person, index) => ({ ...person, ediTeamOrder: index })))
+    setTeam(orderedTeam)
     setSaveError('')
     try {
-      await reorderEdiTeam(teamOrders)
+      await reorderEdiTeam(orderedTeam.map((person) => person.id))
     } catch (error) {
       setSaveError(error.message)
       loadEdiTeam().then(setTeam).catch(() => {})
