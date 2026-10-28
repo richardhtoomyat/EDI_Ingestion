@@ -7,6 +7,7 @@ import {
   emptyDeveloper, loadEdiTeam, loadNotifications, loadOnboardings, markNotificationsRead,
   reorderEdiBucket, updateEdiTeamView, updateEdiAssignment,
 } from './onboardingLink.js'
+import { layoutRect, slotUnderCard } from './teamCardDrag.js'
 
 const LONG_PRESS_MS = 420
 const PERSON_PREFIX = 'person:'
@@ -826,25 +827,6 @@ export default function EdiDashboard({
     return true
   }
 
-  const previewTeamOrder = (draggedId, targetId, point) => {
-    if (!draggedId || !targetId || draggedId === targetId || !point) return
-    const hiddenIds = new Set(teamHiddenRef.current)
-    const visible = teamRef.current.filter((person) => !hiddenIds.has(person.id))
-    const from = visible.findIndex((person) => person.id === draggedId)
-    const to = visible.findIndex((person) => person.id === targetId)
-    if (from < 0 || to < 0 || from === to) return
-    const { clientX, clientY, rect } = point
-    const midX = rect.left + rect.width / 2
-    const midY = rect.top + rect.height / 2
-    const horizontal = Math.abs(clientX - midX) >= Math.abs(clientY - midY)
-    if (horizontal) {
-      if (from < to && clientX < midX) return
-      if (from > to && clientX > midX) return
-    } else if (from < to && clientY < midY) return
-    else if (from > to && clientY > midY) return
-    placeTeamCard(draggedId, targetId)
-  }
-
   const endPersonDrag = () => {
     personDragCleanupRef.current?.()
     personDragCleanupRef.current = null
@@ -879,15 +861,20 @@ export default function EdiDashboard({
       node.style.left = `${left}px`
       node.style.top = `${top}px`
     }
-    const under = document.elementFromPoint(event.clientX, event.clientY)
-    const slot = under?.closest?.('[data-person-id]')
-    const targetId = slot?.getAttribute('data-person-id') || ''
-    if (!targetId || targetId === lift.id) return
-    previewTeamOrder(lift.id, targetId, {
-      clientX: event.clientX,
-      clientY: event.clientY,
-      rect: slot.getBoundingClientRect(),
+    const board = workbucketsRef.current
+    if (!board) return
+    const slots = [...board.querySelectorAll('[data-person-id]')].map((slot) => ({
+      id: slot.getAttribute('data-person-id'),
+      ...layoutRect(slot.getBoundingClientRect(), getComputedStyle(slot).transform),
+    }))
+    const targetId = slotUnderCard(slots, {
+      id: lift.id,
+      left,
+      top,
+      width: lift.width,
+      height: lift.height,
     })
+    if (targetId) placeTeamCard(lift.id, targetId)
   }
 
   const beginPersonDrag = (personId, card, origin) => {
