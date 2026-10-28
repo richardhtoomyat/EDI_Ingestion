@@ -64,33 +64,24 @@ function SignInCard({ error, busy, onMicrosoft, onSignIn }) {
   }
 
   return (
-    <div className="signin">
-      <section className="signin-brand">
+    <main className="signin">
+      <form className="signin-form" onSubmit={submit} noValidate>
         <img className="signin-logo" src={logo} alt="Day & Ross" />
-        <div className="signin-brand-copy">
-          <p className="signin-kicker">Day &amp; Ross</p>
-          <h1>EDI<span>Conveyor</span></h1>
-          <p className="signin-lead">From the first customer request to production EDI.</p>
+        <h1>EDI<span>Conveyor</span></h1>
+        <p className="intro">Use your Day &amp; Ross Microsoft account, or sign in with email.</p>
+        {error && <div className="banner err" role="alert">{error}</div>}
+        <button type="button" className="ms-btn" disabled={busy} onClick={onMicrosoft}>
+          <MicrosoftMark />
+          Sign in with Microsoft
+        </button>
+        <div className="auth-divider"><span>or email</span></div>
+        <TextField label="Email" type="email" value={email} onChange={setEmail} required autoComplete="email" />
+        <TextField label="Password" type="password" value={password} onChange={setPassword} required autoComplete="current-password" />
+        <div className="actions">
+          <button type="submit" disabled={busy}>Sign in <Chevron /></button>
         </div>
-      </section>
-      <main className="signin-panel">
-        <form className="signin-form" onSubmit={submit} noValidate>
-          <h2>Sign in</h2>
-          <p className="intro">Use your Day &amp; Ross Microsoft account, or sign in with email.</p>
-          {error && <div className="banner err" role="alert">{error}</div>}
-          <button type="button" className="ms-btn" disabled={busy} onClick={onMicrosoft}>
-            <MicrosoftMark />
-            Sign in with Microsoft
-          </button>
-          <div className="auth-divider"><span>or email</span></div>
-          <TextField label="Email" type="email" value={email} onChange={setEmail} required autoComplete="email" />
-          <TextField label="Password" type="password" value={password} onChange={setPassword} required autoComplete="current-password" />
-          <div className="actions">
-            <button type="submit" disabled={busy}>Sign in <Chevron /></button>
-          </div>
-        </form>
-      </main>
-    </div>
+      </form>
+    </main>
   )
 }
 
