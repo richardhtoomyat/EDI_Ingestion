@@ -421,6 +421,7 @@ export default function EdiDashboard({
   const [records, setRecords] = useState([])
   const [team, setTeam] = useState([])
   const [teamHidden, setTeamHidden] = useState([])
+  const [hidePickerOpen, setHidePickerOpen] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [saveError, setSaveError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -506,11 +507,6 @@ export default function EdiDashboard({
     () => team.filter((person) => !hiddenSet.has(person.id)),
     [team, hiddenSet],
   )
-  const hiddenTeam = useMemo(
-    () => team.filter((person) => hiddenSet.has(person.id)),
-    [team, hiddenSet],
-  )
-
   const reloadTeam = () => loadEdiTeam()
     .then((next) => {
       setTeam(next.profiles || [])
@@ -675,13 +671,14 @@ export default function EdiDashboard({
     }
   }
 
-  const hideTeamPerson = (personId) => {
-    if (!personId || hiddenSet.has(personId)) return
-    persistTeamHidden([...teamHidden, personId])
-  }
-
-  const showTeamPerson = (personId) => {
-    if (!personId || !hiddenSet.has(personId)) return
+  const toggleTeamHidden = (personId, hide) => {
+    if (!personId) return
+    if (hide) {
+      if (hiddenSet.has(personId)) return
+      persistTeamHidden([...teamHidden, personId])
+      return
+    }
+    if (!hiddenSet.has(personId)) return
     persistTeamHidden(teamHidden.filter((id) => id !== personId))
   }
 
@@ -935,25 +932,39 @@ export default function EdiDashboard({
         {tab === 'team' && !loading && (
           <div className="workbuckets-layout">
             <div className="workbuckets-main">
-              {hiddenTeam.length > 0 && (
-                <div className="team-hidden-bar">
-                  <span>Hidden</span>
-                  {hiddenTeam.map((person) => {
-                    const label = [person.firstName, person.lastName].filter(Boolean).join(' ') || person.email
-                    return (
-                      <button
-                        key={person.id}
-                        type="button"
-                        className="team-unhide"
-                        onClick={() => showTeamPerson(person.id)}
-                      >
-                        {label}
-                        <em>Show</em>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+              <div className="team-view-toolbar">
+                <button
+                  type="button"
+                  className={`team-hide-toggle${hidePickerOpen ? ' open' : ''}`}
+                  aria-expanded={hidePickerOpen}
+                  onClick={() => setHidePickerOpen((open) => !open)}
+                >
+                  Hide
+                  {teamHidden.length > 0 ? ` (${teamHidden.length})` : ''}
+                </button>
+                {hidePickerOpen && (
+                  <div className="team-hide-picker">
+                    {team.length === 0 ? (
+                      <p className="intro">No team members yet.</p>
+                    ) : (
+                      team.map((person) => {
+                        const label = [person.firstName, person.lastName].filter(Boolean).join(' ') || person.email
+                        const checked = hiddenSet.has(person.id)
+                        return (
+                          <label key={person.id} className="team-hide-option">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) => toggleTeamHidden(person.id, event.target.checked)}
+                            />
+                            <span>{label}</span>
+                          </label>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="workbuckets">
                 {team.length === 0 && (
                   <section className="card">
@@ -970,8 +981,7 @@ export default function EdiDashboard({
                       className={`card workbucket${dragOver === person.id ? ' over' : ''}${dragOverPerson === person.id ? ' person-target' : ''}${personArmed ? ' armed' : ''}`}
                       draggable
                       onPointerDown={(event) => {
-                        // Only arm from the header area, not from cards / hide control
-                        if (event.target.closest('.bucket-card, .workbucket-hide')) return
+                        if (event.target.closest('.bucket-card')) return
                         startLongPress(() => {
                           armedPersonRef.current = person.id
                           armedItemRef.current = ''
@@ -995,9 +1005,7 @@ export default function EdiDashboard({
                         if (armedPersonRef.current === person.id || longPressTimer.current) event.preventDefault()
                       }}
                       onDragStart={(event) => {
-                        if (event.target.closest('.bucket-card, .workbucket-hide')) {
-                          return
-                        }
+                        if (event.target.closest('.bucket-card')) return
                         if (armedPersonRef.current !== person.id) {
                           event.preventDefault()
                           cancelLongPress()
@@ -1027,21 +1035,7 @@ export default function EdiDashboard({
                       }}
                       onDrop={onDropOwner(person.id)}
                     >
-                      <div className="workbucket-head">
-                        <h3>{label}</h3>
-                        <button
-                          type="button"
-                          className="workbucket-hide"
-                          aria-label={`Hide ${label}`}
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            hideTeamPerson(person.id)
-                          }}
-                        >
-                          Hide
-                        </button>
-                      </div>
+                      <h3>{label}</h3>
                       {bucket.map((item) => renderBucketCard(item, person.id))}
                     </section>
                   )
