@@ -68,7 +68,6 @@ function SignInCard({ error, busy, onMicrosoft, onSignIn }) {
       <form className="signin-form" onSubmit={submit} noValidate>
         <img className="signin-logo" src={logo} alt="Day & Ross" />
         <h1>EDI<span>Conveyor</span></h1>
-        <p className="intro">Use your Day &amp; Ross Microsoft account, or sign in with email.</p>
         {error && <div className="banner err" role="alert">{error}</div>}
         <button type="button" className="ms-btn" disabled={busy} onClick={onMicrosoft}>
           <MicrosoftMark />
