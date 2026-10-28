@@ -446,6 +446,10 @@ export default function EdiDashboard({
   const armedItemRef = useRef('')
   const armedPersonRef = useRef('')
   const dragKindRef = useRef('')
+  const draggingPersonRef = useRef('')
+  const teamOrderDirtyRef = useRef(false)
+  const teamRef = useRef([])
+  const teamHiddenRef = useRef([])
   const firstName = profile?.firstName || ''
   const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
 
@@ -521,6 +525,8 @@ export default function EdiDashboard({
 
   const items = useMemo(() => records.map(recordToItem), [records])
   const hiddenSet = useMemo(() => new Set(teamHidden), [teamHidden])
+  teamRef.current = team
+  teamHiddenRef.current = teamHidden
   const visibleTeam = useMemo(
     () => team.filter((person) => !hiddenSet.has(person.id)),
     [team, hiddenSet],
@@ -700,15 +706,42 @@ export default function EdiDashboard({
     persistTeamHidden(teamHidden.filter((id) => id !== personId))
   }
 
-  const reorderTeam = (draggedId, targetId) => {
-    if (!draggedId || !targetId || draggedId === targetId) return
-    const from = visibleTeam.findIndex((person) => person.id === draggedId)
-    const to = visibleTeam.findIndex((person) => person.id === targetId)
-    if (from < 0 || to < 0) return
-    const next = [...visibleTeam]
-    const [moved] = next.splice(from, 1)
-    next.splice(to, 0, moved)
-    persistTeamOrder(next)
+  const placeTeamCard = (draggedId, targetId) => {
+    if (!draggedId || !targetId || draggedId === targetId) return false
+    const hiddenIds = new Set(teamHiddenRef.current)
+    const current = teamRef.current
+    const visible = current.filter((person) => !hiddenIds.has(person.id))
+    const hidden = current.filter((person) => hiddenIds.has(person.id))
+    const from = visible.findIndex((person) => person.id === draggedId)
+    const to = visible.findIndex((person) => person.id === targetId)
+    if (from < 0 || to < 0 || from === to) return false
+    const nextVisible = [...visible]
+    const [moved] = nextVisible.splice(from, 1)
+    nextVisible.splice(to, 0, moved)
+    const nextTeam = [...nextVisible, ...hidden]
+    teamRef.current = nextTeam
+    teamOrderDirtyRef.current = true
+    setTeam(nextTeam)
+    return true
+  }
+
+  const previewTeamOrder = (draggedId, targetId, point) => {
+    if (!draggedId || !targetId || draggedId === targetId || !point) return
+    const hiddenIds = new Set(teamHiddenRef.current)
+    const visible = teamRef.current.filter((person) => !hiddenIds.has(person.id))
+    const from = visible.findIndex((person) => person.id === draggedId)
+    const to = visible.findIndex((person) => person.id === targetId)
+    if (from < 0 || to < 0 || from === to) return
+    const { clientX, clientY, rect } = point
+    const midX = rect.left + rect.width / 2
+    const midY = rect.top + rect.height / 2
+    const horizontal = Math.abs(clientX - midX) >= Math.abs(clientY - midY)
+    if (horizontal) {
+      if (from < to && clientX < midX) return
+      if (from > to && clientX > midX) return
+    } else if (from < to && clientY < midY) return
+    else if (from > to && clientY > midY) return
+    placeTeamCard(draggedId, targetId)
   }
 
   const requestStage = (item, stage) => {
@@ -744,10 +777,7 @@ export default function EdiDashboard({
     setArmedPersonId('')
     dragKindRef.current = ''
     const payload = readDragPayload(event.dataTransfer)
-    if (payload.type === 'person') {
-      if (ownerId) reorderTeam(payload.id, ownerId)
-      return
-    }
+    if (payload.type === 'person') return
     if (payload.type !== 'item' || !payload.id) return
     const current = items.find((item) => item.id === payload.id)
     if ((current?.ownerId || '') === ownerId) return
@@ -1068,23 +1098,39 @@ export default function EdiDashboard({
                           return
                         }
                         dragKindRef.current = 'person'
+                        draggingPersonRef.current = person.id
+                        teamOrderDirtyRef.current = false
                         event.dataTransfer.setData('text/plain', `${PERSON_PREFIX}${person.id}`)
                         event.dataTransfer.effectAllowed = 'move'
                       }}
                       onDragEnd={() => {
+                        const dirty = teamOrderDirtyRef.current
+                        teamOrderDirtyRef.current = false
+                        draggingPersonRef.current = ''
                         disarmAll()
                         setDragOverPerson('')
                         dragKindRef.current = ''
+                        if (!dirty) return
+                        const hiddenIds = new Set(teamHiddenRef.current)
+                        const visible = teamRef.current.filter((member) => !hiddenIds.has(member.id))
+                        persistTeamOrder(visible)
                       }}
                       onDragOver={(event) => {
                         event.preventDefault()
                         if (dragKindRef.current === 'person') {
-                          setDragOverPerson(person.id)
+                          const draggedId = draggingPersonRef.current
+                          setDragOverPerson(draggedId || person.id)
+                          previewTeamOrder(draggedId, person.id, {
+                            clientX: event.clientX,
+                            clientY: event.clientY,
+                            rect: event.currentTarget.getBoundingClientRect(),
+                          })
                           return
                         }
                         setDragOver(person.id)
                       }}
                       onDragLeave={() => {
+                        if (dragKindRef.current === 'person') return
                         setDragOver('')
                         setDragOverItem('')
                         setDragOverPerson((current) => (current === person.id ? '' : current))
