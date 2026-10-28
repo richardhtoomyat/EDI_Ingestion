@@ -12,6 +12,28 @@ const LONG_PRESS_MS = 420
 const PERSON_PREFIX = 'person:'
 const SHUFFLE_EASE = 'cubic-bezier(.22,1,.36,1)'
 
+function settleCard(node, fromRect) {
+  if (!node || !fromRect) return
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const last = node.getBoundingClientRect()
+  const dx = fromRect.left - last.left
+  const dy = fromRect.top - last.top
+  if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return
+  node.style.transition = 'none'
+  node.style.transform = `translate(${dx}px, ${dy}px)`
+  node.style.zIndex = '3'
+  node.getBoundingClientRect()
+  node.style.transition = `transform 280ms ${SHUFFLE_EASE}`
+  node.style.transform = ''
+  const clear = (event) => {
+    if (event.propertyName !== 'transform') return
+    node.style.transition = ''
+    node.style.zIndex = ''
+    node.removeEventListener('transitionend', clear)
+  }
+  node.addEventListener('transitionend', clear)
+}
+
 function playCardShuffle(board, before) {
   if (!board || !before?.size) return
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -488,6 +510,11 @@ export default function EdiDashboard({
   const teamHiddenRef = useRef([])
   const workbucketsRef = useRef(null)
   const flipFromRef = useRef(null)
+  const liftRef = useRef(null)
+  const liftedNodeRef = useRef(null)
+  const settleFromRef = useRef(null)
+  const personDragCleanupRef = useRef(null)
+  const [draggingPersonId, setDraggingPersonId] = useState('')
   const firstName = profile?.firstName || ''
   const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
 
@@ -534,6 +561,11 @@ export default function EdiDashboard({
       // Notifications are optional until SQL is applied.
     })
 
+  useEffect(() => () => {
+    personDragCleanupRef.current?.()
+    document.body.classList.remove('team-card-dragging')
+  }, [])
+
   useEffect(() => {
     let cancel = false
     setLoading(true)
@@ -569,9 +601,25 @@ export default function EdiDashboard({
   useLayoutEffect(() => {
     const before = flipFromRef.current
     flipFromRef.current = null
-    if (!before) return
-    playCardShuffle(workbucketsRef.current, before)
-  }, [team])
+    if (before) playCardShuffle(workbucketsRef.current, before)
+    const settle = settleFromRef.current
+    settleFromRef.current = null
+    if (!settle || draggingPersonId) return
+    const card = workbucketsRef.current?.querySelector(`[data-person-id="${CSS.escape(settle.id)}"] .workbucket`)
+    settleCard(card, settle.rect)
+  }, [team, draggingPersonId])
+
+  useLayoutEffect(() => {
+    if (!draggingPersonId) return undefined
+    const node = liftedNodeRef.current
+    const lift = liftRef.current
+    if (!node || !lift) return undefined
+    node.style.left = `${lift.left}px`
+    node.style.top = `${lift.top}px`
+    node.style.width = `${lift.width}px`
+    node.style.height = `${lift.height}px`
+    return undefined
+  }, [draggingPersonId])
   const visibleTeam = useMemo(
     () => team.filter((person) => !hiddenSet.has(person.id)),
     [team, hiddenSet],
@@ -795,6 +843,86 @@ export default function EdiDashboard({
     } else if (from < to && clientY < midY) return
     else if (from > to && clientY > midY) return
     placeTeamCard(draggedId, targetId)
+  }
+
+  const endPersonDrag = () => {
+    personDragCleanupRef.current?.()
+    personDragCleanupRef.current = null
+    const lift = liftRef.current
+    const node = liftedNodeRef.current
+    if (node && lift) settleFromRef.current = { id: lift.id, rect: node.getBoundingClientRect() }
+    const dirty = teamOrderDirtyRef.current
+    teamOrderDirtyRef.current = false
+    liftRef.current = null
+    liftedNodeRef.current = null
+    draggingPersonRef.current = ''
+    dragKindRef.current = ''
+    document.body.classList.remove('team-card-dragging')
+    disarmAll()
+    setDragOverPerson('')
+    setDraggingPersonId('')
+    if (!dirty) return
+    const hiddenIds = new Set(teamHiddenRef.current)
+    const visible = teamRef.current.filter((member) => !hiddenIds.has(member.id))
+    persistTeamOrder(visible)
+  }
+
+  const movePersonDrag = (event) => {
+    const lift = liftRef.current
+    if (!lift) return
+    const left = event.clientX - lift.offsetX
+    const top = event.clientY - lift.offsetY
+    lift.left = left
+    lift.top = top
+    const node = liftedNodeRef.current
+    if (node) {
+      node.style.left = `${left}px`
+      node.style.top = `${top}px`
+    }
+    const under = document.elementFromPoint(event.clientX, event.clientY)
+    const slot = under?.closest?.('[data-person-id]')
+    const targetId = slot?.getAttribute('data-person-id') || ''
+    if (!targetId || targetId === lift.id) return
+    previewTeamOrder(lift.id, targetId, {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      rect: slot.getBoundingClientRect(),
+    })
+  }
+
+  const beginPersonDrag = (personId, card, origin) => {
+    const rect = card.getBoundingClientRect()
+    const slot = card.parentElement
+    const slotRect = slot?.getBoundingClientRect()
+    const style = getComputedStyle(card)
+    const extra = (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0)
+    liftRef.current = {
+      id: personId,
+      offsetX: origin.x - rect.left,
+      offsetY: origin.y - rect.top,
+      width: rect.width,
+      height: rect.height,
+      slotHeight: Math.max(slotRect?.height || 0, rect.height + extra),
+      left: rect.left,
+      top: rect.top,
+    }
+    dragKindRef.current = 'person'
+    draggingPersonRef.current = personId
+    teamOrderDirtyRef.current = false
+    armedPersonRef.current = personId
+    document.body.classList.add('team-card-dragging')
+    setArmedPersonId(personId)
+    setDraggingPersonId(personId)
+    const move = (event) => movePersonDrag(event)
+    const up = () => endPersonDrag()
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    personDragCleanupRef.current = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
   }
 
   const requestStage = (item, stage) => {
@@ -1112,88 +1240,72 @@ export default function EdiDashboard({
                 )}
                 {visibleTeam.map((person) => {
                   const bucket = sortBucket(items.filter((item) => item.ownerId === person.id))
-                  const personArmed = armedPersonId === person.id
+                  const lifted = draggingPersonId === person.id
                   const label = [person.firstName, person.lastName].filter(Boolean).join(' ') || person.email
-                  return (
-                    <section
-                      key={person.id}
-                      data-person-id={person.id}
-                      className={`card workbucket${dragOver === person.id ? ' over' : ''}${dragOverPerson === person.id ? ' person-target' : ''}${personArmed ? ' armed' : ''}`}
-                      draggable
-                      onPointerDown={(event) => {
-                        if (event.target.closest('.bucket-card')) return
-                        startLongPress(() => {
-                          armedPersonRef.current = person.id
-                          armedItemRef.current = ''
-                          setArmedPersonId(person.id)
-                          setArmedItemId('')
-                        })(event)
-                      }}
-                      onPointerUp={() => {
-                        cancelLongPress()
-                        if (dragKindRef.current !== 'person' && armedPersonRef.current === person.id) {
-                          setTimeout(() => {
-                            if (armedPersonRef.current === person.id && dragKindRef.current !== 'person') {
-                              armedPersonRef.current = ''
-                              setArmedPersonId('')
-                            }
-                          }, 0)
-                        }
-                      }}
-                      onPointerCancel={disarmAll}
-                      onContextMenu={(event) => {
-                        if (armedPersonRef.current === person.id || longPressTimer.current) event.preventDefault()
-                      }}
-                      onDragStart={(event) => {
-                        if (event.target.closest('.bucket-card')) return
-                        if (armedPersonRef.current !== person.id) {
-                          event.preventDefault()
-                          cancelLongPress()
-                          return
-                        }
-                        dragKindRef.current = 'person'
-                        draggingPersonRef.current = person.id
-                        teamOrderDirtyRef.current = false
-                        event.dataTransfer.setData('text/plain', `${PERSON_PREFIX}${person.id}`)
-                        event.dataTransfer.effectAllowed = 'move'
-                      }}
-                      onDragEnd={() => {
-                        const dirty = teamOrderDirtyRef.current
-                        teamOrderDirtyRef.current = false
-                        draggingPersonRef.current = ''
-                        disarmAll()
-                        setDragOverPerson('')
-                        dragKindRef.current = ''
-                        if (!dirty) return
-                        const hiddenIds = new Set(teamHiddenRef.current)
-                        const visible = teamRef.current.filter((member) => !hiddenIds.has(member.id))
-                        persistTeamOrder(visible)
-                      }}
-                      onDragOver={(event) => {
-                        event.preventDefault()
-                        if (dragKindRef.current === 'person') {
-                          const draggedId = draggingPersonRef.current
-                          setDragOverPerson(draggedId || person.id)
-                          previewTeamOrder(draggedId, person.id, {
-                            clientX: event.clientX,
-                            clientY: event.clientY,
-                            rect: event.currentTarget.getBoundingClientRect(),
-                          })
-                          return
-                        }
-                        setDragOver(person.id)
-                      }}
-                      onDragLeave={() => {
-                        if (dragKindRef.current === 'person') return
-                        setDragOver('')
-                        setDragOverItem('')
-                        setDragOverPerson((current) => (current === person.id ? '' : current))
-                      }}
-                      onDrop={onDropOwner(person.id)}
-                    >
+                  const body = (
+                    <>
                       <h3>{label}</h3>
                       {bucket.map((item) => renderBucketCard(item, person.id))}
-                    </section>
+                    </>
+                  )
+                  return (
+                    <div
+                      key={person.id}
+                      data-person-id={person.id}
+                      className="workbucket-slot"
+                      style={lifted ? { height: liftRef.current?.slotHeight } : undefined}
+                    >
+                      {lifted ? createPortal(
+                        <section ref={liftedNodeRef} className="card workbucket lifted armed">
+                          {body}
+                        </section>,
+                        document.body,
+                      ) : (
+                        <section
+                          className={`card workbucket${dragOver === person.id ? ' over' : ''}${dragOverPerson === person.id ? ' person-target' : ''}`}
+                          onPointerDown={(event) => {
+                            if (event.target.closest('.bucket-card')) return
+                            if (event.button != null && event.button !== 0) return
+                            const card = event.currentTarget
+                            const origin = { x: event.clientX, y: event.clientY }
+                            const cancelIfMoved = (ev) => {
+                              if (liftRef.current) return
+                              if (Math.hypot(ev.clientX - origin.x, ev.clientY - origin.y) > 8) {
+                                cancelLongPress()
+                                window.removeEventListener('pointermove', cancelIfMoved)
+                              }
+                            }
+                            window.addEventListener('pointermove', cancelIfMoved)
+                            const stopWatch = () => window.removeEventListener('pointermove', cancelIfMoved)
+                            window.addEventListener('pointerup', stopWatch, { once: true })
+                            startLongPress(() => {
+                              stopWatch()
+                              beginPersonDrag(person.id, card, origin)
+                            })(event)
+                          }}
+                          onPointerUp={() => {
+                            if (dragKindRef.current === 'person') return
+                            cancelLongPress()
+                          }}
+                          onContextMenu={(event) => {
+                            if (armedPersonRef.current === person.id || longPressTimer.current) event.preventDefault()
+                          }}
+                          onDragOver={(event) => {
+                            if (dragKindRef.current === 'person') return
+                            event.preventDefault()
+                            setDragOver(person.id)
+                          }}
+                          onDragLeave={() => {
+                            if (dragKindRef.current === 'person') return
+                            setDragOver('')
+                            setDragOverItem('')
+                          }}
+                          onDrop={onDropOwner(person.id)}
+                        >
+                          {body}
+                        </section>
+                      )}
+                    </div>
                   )
                 })}
               </div>
