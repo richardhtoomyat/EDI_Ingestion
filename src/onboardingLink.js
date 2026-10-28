@@ -185,6 +185,17 @@ export async function loadEdiTeam() {
   return payload.profiles || []
 }
 
+export async function reorderEdiTeam(teamOrders) {
+  const response = await fetch('/api/profiles', {
+    method: 'PATCH',
+    headers: await authHeaders(),
+    body: JSON.stringify({ teamOrders }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || 'Could not save team order')
+  return payload.profiles || []
+}
+
 export async function loadOrganization() {
   const response = await fetch('/api/profiles?role=all', { headers: await authHeaders() })
   const payload = await response.json().catch(() => ({}))

@@ -1,8 +1,22 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Shell } from './chrome.jsx'
 import { CreateOnboarding } from './AgentApp.jsx'
-import { emptyDeveloper, loadEdiTeam, loadOnboardings, reorderEdiBucket, updateEdiAssignment } from './onboardingLink.js'
+import {
+  emptyDeveloper, loadEdiTeam, loadOnboardings, reorderEdiBucket, reorderEdiTeam, updateEdiAssignment,
+} from './onboardingLink.js'
+
+const LONG_PRESS_MS = 420
+const PERSON_PREFIX = 'person:'
+
+function readDragPayload(dataTransfer) {
+  const plain = dataTransfer.getData('text/plain') || ''
+  if (plain.startsWith(PERSON_PREFIX)) {
+    return { type: 'person', id: plain.slice(PERSON_PREFIX.length) }
+  }
+  if (plain) return { type: 'item', id: plain }
+  return { type: '', id: '' }
+}
 
 const STATUSES = [
   { value: 'all', label: 'All statuses' },
@@ -416,10 +430,46 @@ export default function EdiDashboard({
   const [editing, setEditing] = useState(null)
   const [dragOver, setDragOver] = useState('')
   const [dragOverItem, setDragOverItem] = useState('')
+  const [dragOverPerson, setDragOverPerson] = useState('')
+  const [armedItemId, setArmedItemId] = useState('')
+  const [armedPersonId, setArmedPersonId] = useState('')
   const [stagePrompt, setStagePrompt] = useState(null)
   const [estimateDraft, setEstimateDraft] = useState('')
+  const longPressTimer = useRef(null)
+  const suppressClick = useRef(false)
+  const armedItemRef = useRef('')
+  const armedPersonRef = useRef('')
+  const dragKindRef = useRef('')
   const firstName = profile?.firstName || ''
   const welcome = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+
+  const startLongPress = (arm) => (event) => {
+    if (event.button != null && event.button !== 0) return
+    clearLongPress()
+    longPressTimer.current = setTimeout(() => {
+      arm()
+      longPressTimer.current = null
+    }, LONG_PRESS_MS)
+  }
+
+  const cancelLongPress = () => {
+    clearLongPress()
+  }
+
+  const disarmAll = () => {
+    clearLongPress()
+    armedItemRef.current = ''
+    armedPersonRef.current = ''
+    setArmedItemId('')
+    setArmedPersonId('')
+  }
 
   const sortBucket = (list) => [...list].sort((a, b) => {
     const orderDiff = (a.ediBucketOrder || 0) - (b.ediBucketOrder || 0)
@@ -545,11 +595,14 @@ export default function EdiDashboard({
 
   const onDropInBucket = (ownerId) => (event) => {
     event.preventDefault()
-    const id = event.dataTransfer.getData('text/plain')
+    const payload = readDragPayload(event.dataTransfer)
     const targetId = event.currentTarget.getAttribute('data-item-id') || ''
     setDragOver('')
     setDragOverItem('')
-    if (!id) return
+    setArmedItemId('')
+    dragKindRef.current = ''
+    if (payload.type !== 'item' || !payload.id) return
+    const id = payload.id
     const current = items.find((item) => item.id === id)
     const currentOwner = current?.ownerId || ''
     if (currentOwner === ownerId && targetId) {
@@ -576,9 +629,33 @@ export default function EdiDashboard({
         next.splice(to, 0, moved)
         await persistBucketOrder(next)
       }).catch(() => {})
-      return
     }
-    if (currentOwner !== ownerId) assign(id, ownerId)
+  }
+
+  const persistTeamOrder = async (orderedTeam) => {
+    const teamOrders = orderedTeam.map((person, index) => ({
+      id: person.id,
+      ediTeamOrder: index,
+    }))
+    setTeam(orderedTeam.map((person, index) => ({ ...person, ediTeamOrder: index })))
+    setSaveError('')
+    try {
+      await reorderEdiTeam(teamOrders)
+    } catch (error) {
+      setSaveError(error.message)
+      loadEdiTeam().then(setTeam).catch(() => {})
+    }
+  }
+
+  const reorderTeam = (draggedId, targetId) => {
+    if (!draggedId || !targetId || draggedId === targetId) return
+    const from = team.findIndex((person) => person.id === draggedId)
+    const to = team.findIndex((person) => person.id === targetId)
+    if (from < 0 || to < 0) return
+    const next = [...team]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    persistTeamOrder(next)
   }
 
   const requestStage = (item, stage) => {
@@ -608,46 +685,101 @@ export default function EdiDashboard({
 
   const onDropOwner = (ownerId) => (event) => {
     event.preventDefault()
-    const id = event.dataTransfer.getData('text/plain')
     setDragOver('')
     setDragOverItem('')
-    if (!id) return
-    const current = items.find((item) => item.id === id)
+    setDragOverPerson('')
+    setArmedPersonId('')
+    dragKindRef.current = ''
+    const payload = readDragPayload(event.dataTransfer)
+    if (payload.type === 'person') {
+      if (ownerId) reorderTeam(payload.id, ownerId)
+      return
+    }
+    if (payload.type !== 'item' || !payload.id) return
+    const current = items.find((item) => item.id === payload.id)
     if ((current?.ownerId || '') === ownerId) return
-    assign(id, ownerId)
+    assign(payload.id, ownerId)
   }
 
-  const renderBucketCard = (item, ownerId) => (
-    <button
-      key={item.id}
-      type="button"
-      className={`bucket-card${dragOverItem === item.id ? ' drop-target' : ''}`}
-      data-item-id={item.id}
-      draggable
-      onDragStart={(event) => {
-        event.dataTransfer.setData('text/plain', item.id)
-        event.dataTransfer.effectAllowed = 'move'
-      }}
-      onDragOver={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        setDragOver(ownerId === '' ? 'none' : ownerId)
-        setDragOverItem(item.id)
-      }}
-      onDragLeave={() => {
-        setDragOverItem((current) => (current === item.id ? '' : current))
-      }}
-      onDrop={(event) => {
-        event.stopPropagation()
-        onDropInBucket(ownerId)(event)
-      }}
-      onClick={() => setOpenId(item.id)}
-    >
-      <strong>{item.company}</strong>
-      <span>{statusLabel(item.status, item, team)}</span>
-      {item.needsAt7Mapping && <span className="edi-flag">Custom mapping</span>}
-    </button>
-  )
+  const renderBucketCard = (item, ownerId) => {
+    const armed = armedItemId === item.id
+    return (
+      <button
+        key={item.id}
+        type="button"
+        className={`bucket-card${dragOverItem === item.id ? ' drop-target' : ''}${armed ? ' armed' : ''}`}
+        data-item-id={item.id}
+        draggable
+        onPointerDown={startLongPress(() => {
+          suppressClick.current = true
+          armedItemRef.current = item.id
+          armedPersonRef.current = ''
+          setArmedItemId(item.id)
+          setArmedPersonId('')
+        })}
+        onPointerUp={() => {
+          cancelLongPress()
+          if (dragKindRef.current !== 'item') {
+            setTimeout(() => {
+              if (armedItemRef.current === item.id && dragKindRef.current !== 'item') {
+                armedItemRef.current = ''
+                setArmedItemId('')
+                suppressClick.current = false
+              }
+            }, 0)
+          }
+        }}
+        onPointerCancel={disarmAll}
+        onContextMenu={(event) => {
+          if (armedItemRef.current === item.id || longPressTimer.current) event.preventDefault()
+        }}
+        onDragStart={(event) => {
+          if (armedItemRef.current !== item.id) {
+            event.preventDefault()
+            cancelLongPress()
+            return
+          }
+          suppressClick.current = true
+          dragKindRef.current = 'item'
+          event.dataTransfer.setData('text/plain', item.id)
+          event.dataTransfer.effectAllowed = 'move'
+        }}
+        onDragEnd={() => {
+          disarmAll()
+          setDragOverItem('')
+          dragKindRef.current = ''
+          setTimeout(() => { suppressClick.current = false }, 0)
+        }}
+        onDragOver={(event) => {
+          if (dragKindRef.current === 'person') return
+          event.preventDefault()
+          event.stopPropagation()
+          setDragOver(ownerId === '' ? 'none' : ownerId)
+          setDragOverItem(item.id)
+        }}
+        onDragLeave={() => {
+          setDragOverItem((current) => (current === item.id ? '' : current))
+        }}
+        onDrop={(event) => {
+          event.stopPropagation()
+          onDropInBucket(ownerId)(event)
+        }}
+        onClick={() => {
+          if (suppressClick.current || armedItemRef.current === item.id) {
+            suppressClick.current = false
+            armedItemRef.current = ''
+            setArmedItemId('')
+            return
+          }
+          setOpenId(item.id)
+        }}
+      >
+        <strong>{item.company}</strong>
+        <span>{statusLabel(item.status, item, team)}</span>
+        {item.needsAt7Mapping && <span className="edi-flag">Custom mapping</span>}
+      </button>
+    )
+  }
 
   const openRecord = (id) => {
     const record = records.find((item) => item.id === id)
@@ -772,18 +904,75 @@ export default function EdiDashboard({
               )}
               {team.map((person) => {
                 const bucket = sortBucket(items.filter((item) => item.ownerId === person.id))
+                const personArmed = armedPersonId === person.id
                 return (
                   <section
                     key={person.id}
-                    className={`card workbucket${dragOver === person.id ? ' over' : ''}`}
-                    onDragOver={(event) => { event.preventDefault(); setDragOver(person.id) }}
-                    onDragLeave={() => { setDragOver(''); setDragOverItem('') }}
+                    className={`card workbucket${dragOver === person.id ? ' over' : ''}${dragOverPerson === person.id ? ' person-target' : ''}${personArmed ? ' armed' : ''}`}
+                    draggable
+                    onPointerDown={(event) => {
+                      // Only arm from the header area, not from cards inside
+                      if (event.target.closest('.bucket-card')) return
+                      startLongPress(() => {
+                        armedPersonRef.current = person.id
+                        armedItemRef.current = ''
+                        setArmedPersonId(person.id)
+                        setArmedItemId('')
+                      })(event)
+                    }}
+                    onPointerUp={() => {
+                      cancelLongPress()
+                      if (dragKindRef.current !== 'person' && armedPersonRef.current === person.id) {
+                        setTimeout(() => {
+                          if (armedPersonRef.current === person.id && dragKindRef.current !== 'person') {
+                            armedPersonRef.current = ''
+                            setArmedPersonId('')
+                          }
+                        }, 0)
+                      }
+                    }}
+                    onPointerCancel={disarmAll}
+                    onContextMenu={(event) => {
+                      if (armedPersonRef.current === person.id || longPressTimer.current) event.preventDefault()
+                    }}
+                    onDragStart={(event) => {
+                      if (event.target.closest('.bucket-card')) {
+                        // Let the card handle its own drag; don't drag the column
+                        return
+                      }
+                      if (armedPersonRef.current !== person.id) {
+                        event.preventDefault()
+                        cancelLongPress()
+                        return
+                      }
+                      dragKindRef.current = 'person'
+                      event.dataTransfer.setData('text/plain', `${PERSON_PREFIX}${person.id}`)
+                      event.dataTransfer.effectAllowed = 'move'
+                    }}
+                    onDragEnd={() => {
+                      disarmAll()
+                      setDragOverPerson('')
+                      dragKindRef.current = ''
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      if (dragKindRef.current === 'person') {
+                        setDragOverPerson(person.id)
+                        return
+                      }
+                      setDragOver(person.id)
+                    }}
+                    onDragLeave={() => {
+                      setDragOver('')
+                      setDragOverItem('')
+                      setDragOverPerson((current) => (current === person.id ? '' : current))
+                    }}
                     onDrop={onDropOwner(person.id)}
                   >
                     <h3>{[person.firstName, person.lastName].filter(Boolean).join(' ') || person.email}</h3>
                     <p className="intro">{person.email}</p>
-                    <p className="bucket-label">Workbucket · drag to prioritize</p>
-                    {bucket.length === 0 && <p className="intro">Drag an onboarding here.</p>}
+                    <p className="bucket-label">Workbucket · long-press card to prioritize · long-press header to reorder team</p>
+                    {bucket.length === 0 && <p className="intro">Long-press a card elsewhere, then drop here.</p>}
                     {bucket.map((item) => renderBucketCard(item, person.id))}
                   </section>
                 )
@@ -791,12 +980,16 @@ export default function EdiDashboard({
             </div>
             <section
               className={`card workbucket workbucket-unassigned${dragOver === 'none' ? ' over' : ''}`}
-              onDragOver={(event) => { event.preventDefault(); setDragOver('none') }}
+              onDragOver={(event) => {
+                if (dragKindRef.current === 'person') return
+                event.preventDefault()
+                setDragOver('none')
+              }}
               onDragLeave={() => { setDragOver(''); setDragOverItem('') }}
               onDrop={onDropOwner('')}
             >
               <h3>Unassigned</h3>
-              <p className="intro">Not in anyone's workbucket yet. Drag to prioritize.</p>
+              <p className="intro">Not in anyone's workbucket yet. Long-press a card to rearrange.</p>
               {sortBucket(items.filter((item) => !item.ownerId && !isDoneStatus(item.status))).map((item) => (
                 renderBucketCard(item, '')
               ))}

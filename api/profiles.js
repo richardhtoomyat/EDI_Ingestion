@@ -88,12 +88,36 @@ function toProfile(row) {
     firstName: row.first_name || '',
     lastName: row.last_name || '',
     role: row.role,
+    ediTeamOrder: Number.isFinite(Number(row.edi_team_order)) ? Number(row.edi_team_order) : 0,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : null,
   }
 }
 
 export default async function handler(req, res) {
   try {
+    if (req.method === 'PATCH') {
+      await requireRole(req, ['edi', 'admin'])
+      const teamOrders = Array.isArray(req.body?.teamOrders) ? req.body.teamOrders : null
+      if (!teamOrders) {
+        return res.status(400).json({ ok: false, error: 'teamOrders is required' })
+      }
+      const updated = []
+      for (const entry of teamOrders) {
+        const entryId = String(entry?.id || '').trim()
+        const order = Number(entry.ediTeamOrder)
+        if (!entryId || !Number.isFinite(order)) continue
+        const rows = await supabase(
+          `profiles?id=eq.${encodeURIComponent(entryId)}&select=id,email,first_name,last_name,role,edi_team_order,created_at`,
+          {
+            method: 'PATCH',
+            body: { edi_team_order: Math.trunc(order) },
+          },
+        )
+        if (rows?.[0]) updated.push(toProfile(rows[0]))
+      }
+      return res.status(200).json({ ok: true, profiles: updated })
+    }
+
     if (req.method !== 'GET') {
       return res.status(405).json({ ok: false, error: 'Method not allowed' })
     }
@@ -106,7 +130,7 @@ export default async function handler(req, res) {
         return res.status(403).json({ ok: false, error: 'Admin access required' })
       }
       const rows = await supabase(
-        'profiles?select=id,email,first_name,last_name,role,created_at&order=first_name.asc,last_name.asc',
+        'profiles?select=id,email,first_name,last_name,role,edi_team_order,created_at&order=first_name.asc,last_name.asc',
       )
       return res.status(200).json({
         ok: true,
@@ -119,18 +143,18 @@ export default async function handler(req, res) {
     }
 
     const rows = await supabase(
-      'profiles?role=eq.edi&select=id,email,first_name,last_name,role,created_at&order=first_name.asc,last_name.asc',
+      'profiles?role=eq.edi&select=id,email,first_name,last_name,role,edi_team_order,created_at&order=edi_team_order.asc,first_name.asc,last_name.asc',
     )
     return res.status(200).json({
       ok: true,
       profiles: (rows || []).map(toProfile),
     })
   } catch (error) {
-    const missing = error.code === 'PGRST205' || /profiles/i.test(error.message || '')
+    const missing = error.code === 'PGRST205' || /profiles|edi_team_order/i.test(error.message || '')
     return res.status(missing && error.status !== 401 && error.status !== 403 ? 503 : error.status || 500).json({
       ok: false,
       error: missing && error.status !== 401 && error.status !== 403
-        ? 'The profiles table does not exist yet. Run supabase/profiles.sql in the Supabase SQL editor.'
+        ? 'The profiles table/columns are missing. Run supabase/profiles.sql (or supabase/profiles_team_order.sql) in the Supabase SQL editor.'
         : error.message,
     })
   }

@@ -47,7 +47,7 @@ function sftpDevApi() {
     configureServer(server) {
       server.middlewares.use('/api/test-sftp', devApi('/api/test-sftp', handler, ['POST']))
       server.middlewares.use('/api/onboardings', devApi('/api/onboardings', onboardings))
-      server.middlewares.use('/api/profiles', devApi('/api/profiles', profiles, ['GET']))
+      server.middlewares.use('/api/profiles', devApi('/api/profiles', profiles, ['GET', 'PATCH']))
       server.middlewares.use('/api/invite', devApi('/api/invite', invite, ['POST']))
     },
   }

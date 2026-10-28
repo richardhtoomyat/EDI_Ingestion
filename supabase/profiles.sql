@@ -4,6 +4,7 @@ create table public.profiles (
   first_name text not null,
   last_name text not null,
   role text not null check (role in ('sale', 'edi', 'coordinator', 'admin')),
+  edi_team_order integer not null default 0,
   created_at timestamptz not null default now()
 );
 
