@@ -15,27 +15,25 @@ export function layoutRect(visual, transform) {
   return plainBox(visual, parts[4] || 0, parts[5] || 0)
 }
 
-// Team columns are tall and uneven. The header band is the part that lines up
-// across the row, and the card center (not the pointer) is what has crossed sideways.
+// The swap point is the crossing of the card's horizontal and vertical midlines.
+// A shorter neighbor may end above that point, so the column under the crosshair still counts.
 export function slotUnderCard(slots, card) {
   if (!card) return ''
-  const bandTop = card.top
-  const bandBottom = card.top + Math.min(72, card.height)
-  const bandLeft = card.left
-  const bandRight = card.left + card.width
-  let bestId = ''
-  let bestOverlap = 0
+  const cx = card.left + card.width / 2
+  const cy = card.top + card.height / 2
+  let columnId = ''
+  let columnDist = Infinity
   for (const slot of slots) {
     if (!slot || slot.id === card.id) continue
-    const overlapW = Math.min(bandRight, slot.right) - Math.max(bandLeft, slot.left)
-    const overlapH = Math.min(bandBottom, slot.bottom) - Math.max(bandTop, slot.top)
-    if (overlapW <= 0 || overlapH <= 0) continue
-    const needed = Math.min(card.width, slot.right - slot.left) * 0.35
-    if (overlapW < needed) continue
-    if (overlapW > bestOverlap) {
-      bestOverlap = overlapW
-      bestId = slot.id
+    const inX = cx >= slot.left && cx < slot.right
+    const inY = cy >= slot.top && cy < slot.bottom
+    if (inX && inY) return slot.id
+    if (!inX) continue
+    const dist = cy < slot.top ? slot.top - cy : cy - slot.bottom
+    if (dist < columnDist) {
+      columnDist = dist
+      columnId = slot.id
     }
   }
-  return bestId
+  return columnId
 }
