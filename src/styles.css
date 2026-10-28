@@ -797,14 +797,14 @@ button.notification-item .notification-time { font-size: .75rem; }
   text-align: center;
 }
 .signin-logo {
-  height: 56px;
+  height: 76px;
   width: auto;
   display: block;
-  margin: 0 auto 16px;
+  margin: 0 auto 18px;
 }
 .signin-form h1 {
-  margin: 0 0 28px;
-  font-size: 2.35rem;
+  margin: 0 0 32px;
+  font-size: 2.85rem;
   font-weight: 600;
   letter-spacing: -.03em;
   line-height: 1.1;
