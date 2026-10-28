@@ -966,9 +966,6 @@ export default function EdiDashboard({
                     onDrop={onDropOwner(person.id)}
                   >
                     <h3>{[person.firstName, person.lastName].filter(Boolean).join(' ') || person.email}</h3>
-                    <p className="intro">{person.email}</p>
-                    <p className="bucket-label">Workbucket · long-press card to prioritize · long-press header to reorder team</p>
-                    {bucket.length === 0 && <p className="intro">Long-press a card elsewhere, then drop here.</p>}
                     {bucket.map((item) => renderBucketCard(item, person.id))}
                   </section>
                 )
@@ -985,7 +982,6 @@ export default function EdiDashboard({
               onDrop={onDropOwner('')}
             >
               <h3>Unassigned</h3>
-              <p className="intro">Not in anyone's workbucket yet. Long-press a card to rearrange.</p>
               {sortBucket(items.filter((item) => !item.ownerId && !isDoneStatus(item.status))).map((item) => (
                 renderBucketCard(item, '')
               ))}
