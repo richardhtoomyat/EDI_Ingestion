@@ -69,7 +69,8 @@ h3 { margin: 14px 0 8px; font-size: .95rem; font-weight: 600; color: var(--orang
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 32px; }
 .cols.sub { margin-top: 14px; }
 .cols > .span-all { grid-column: 1 / -1; }
-.cols.type-service { grid-template-columns: minmax(9rem, 11rem) minmax(0, 1fr); align-items: start; }
+.cols.type-service { grid-template-columns: minmax(9rem, 11rem) minmax(12rem, 16rem) minmax(0, 1fr); align-items: start; }
+.revenue-field { margin-bottom: 0; }
 .cols.type-service .type-field { min-inline-size: 0; }
 .cols.type-service .service-field { min-inline-size: 0; }
 .cols.type-service .service-field .inline { margin-right: 14px; white-space: nowrap; }

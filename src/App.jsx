@@ -368,8 +368,8 @@ function Summary({ state, onEdit }) {
     `Hosting: ${state.hosting === 'dayross' ? 'Day & Ross (Preferred)' : state.hosting === 'customer' ? 'Customer' : '—'}`,
     (state.hosting === 'customer' || state.hosting === 'dayross') ? `Method: ${[state.sftp && 'SFTP (Preferred)', state.as2 && 'AS2'].filter(Boolean).join(', ') || '—'}` : '',
     (state.hosting === 'customer' || state.hosting === 'dayross') && state.as2 ? `AS2 certificate: ${state.as2Certificate?.name || '—'}` : '',
-    (state.hosting === 'customer' || state.hosting === 'dayross') && state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
-    `Completed by: ${state.authorization.name}, ${state.authorization.title}, ${state.authorization.company} on ${state.authorization.date}`,
+    state.hosting === 'customer' && state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
+    `Completed by: ${state.authorization.name}, ${state.authorization.company} on ${state.authorization.date}`,
     '(SFTP password intentionally omitted - share it securely.)',
   ].filter(Boolean).join('\n')
 
@@ -408,14 +408,13 @@ function Summary({ state, onEdit }) {
           {row('Hosting', state.hosting === 'dayross' ? 'Day & Ross (Preferred)' : state.hosting === 'customer' ? 'Customer' : '—')}
           {(state.hosting === 'customer' || state.hosting === 'dayross') && row('Method', [state.sftp && 'SFTP (Preferred)', state.as2 && 'AS2'].filter(Boolean).join(', ') || '—')}
           {(state.hosting === 'customer' || state.hosting === 'dayross') && state.as2 && row('AS2 certificate', state.as2Certificate?.name || '—')}
-          {(state.hosting === 'customer' || state.hosting === 'dayross') && state.sftp && SFTP_FIELDS.map((f) => row(f.label, f.name === 'password' ? '••••••••' : state.sftpDetails[f.name]))}
+          {state.hosting === 'customer' && state.sftp && SFTP_FIELDS.map((f) => row(f.label, f.name === 'password' ? '••••••••' : state.sftpDetails[f.name]))}
         </tbody></table></section>
       )}
       <section className="card"><h2>Authorization</h2><table><tbody>
         {row('Completed by', state.authorization.name)}
-        {row('Title', state.authorization.title)}
         {row('Company', state.authorization.company)}
-        {row('Payment house authorized for API/EDI & other services', state.authorization.paymentHouseAuth)}
+        {row('Passed probationary period against tariff contract', state.authorization.paymentHouseAuth)}
         {row('Comments', state.authorization.comments)}
         {row('Date', state.authorization.date)}
       </tbody></table></section>
@@ -850,9 +849,9 @@ export default function App({ prefill, token }) {
                     />
                   </div>
                 )}
-                {state.sftp && (
+                {state.hosting === 'dayross' && state.sftp && <HostingRequest key="dayross-sftp-request" />}
+                {state.hosting === 'customer' && state.sftp && (
                   <>
-                    {state.hosting === 'dayross' && <HostingRequest key="dayross-sftp-request" />}
                     <div className="cols sub">
                       <Fields prefix="sftp" fields={SFTP_FIELDS} values={state.sftpDetails} onChange={setGroup('sftpDetails')} />
                     </div>
@@ -880,14 +879,13 @@ export default function App({ prefill, token }) {
             <div className="cols">
               <Fields prefix="auth" fields={[
                 { name: 'name', label: 'Name of person completing this form', required: true },
-                { name: 'title', label: 'Title' },
                 { name: 'company', label: 'Company' },
               ]} values={state.authorization} onChange={setGroup('authorization')} errors={err('authorization')} />
               <label className="field"><span>Date</span>
                 <input type="date" value={state.authorization.date} onChange={(e) => setGroup('authorization')('date', e.target.value)} />
               </label>
             </div>
-            <fieldset><legend>Do you give authorization for your payment house to be set up on API/EDI and any other services Day &amp; Ross offers to get backup documents?</legend>
+            <fieldset><legend>Has this customer already passed the probationary period against their tariff contract?</legend>
               {['YES', 'NO'].map((v) => (
                 <label key={v} className="inline"><input type="radio" name="phauth" checked={state.authorization.paymentHouseAuth === v} onChange={() => setGroup('authorization')('paymentHouseAuth', v)} /> {v}</label>
               ))}

@@ -1,4 +1,5 @@
 import { DEVELOPER_FIELDS, PARTY_FIELDS, SERVICES, TRANSACTION_SETS, initialState } from './formConfig.js'
+import { formatAnnualRevenue } from './annualRevenue.js'
 
 function emptySftpDetails() {
   return { ...initialState().sftpDetails }
@@ -49,6 +50,7 @@ export function emptyDraft() {
     customerEmail: '',
     technowRequestId: '',
     type: 'New',
+    expectedAnnualRevenue: '',
     services: [],
     mainAccount: party(),
     logisticsProvider: party(),
@@ -86,6 +88,7 @@ export function mergePrefill(draft) {
   return {
     ...base,
     type: draft.type === 'Revised' ? 'Revised' : 'New',
+    expectedAnnualRevenue: formatAnnualRevenue(draft.expectedAnnualRevenue),
     services: Array.isArray(draft.services) ? draft.services.filter((value) => SERVICE_VALUES.has(value)) : [],
     technowRequestId: draft.technowRequestId || '',
     mainAccount,

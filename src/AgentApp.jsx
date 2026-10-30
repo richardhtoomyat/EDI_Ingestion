@@ -11,6 +11,7 @@ import HostingRequest from './HostingRequest.jsx'
 import As2CertificateField from './As2CertificateField.jsx'
 import StatusPage, { statusCodeText } from './StatusPage.jsx'
 import { formatPostal, normalizeRegion, regionsForCountry } from './addressPlaces.js'
+import { finishAnnualRevenue, formatAnnualRevenue } from './annualRevenue.js'
 
 const wants214 = (draft) => Array.isArray(draft?.sets) && draft.sets.includes('214')
 const toggleList = (list, value) => (list.includes(value) ? list.filter((item) => item !== value) : [...list, value])
@@ -413,6 +414,23 @@ export function CreateOnboarding({
                   </label>
                 ))}
               </fieldset>
+              <label className="field revenue-field">
+                <span>Expected annual revenue</span>
+                <input
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="0.000"
+                  value={draft.expectedAnnualRevenue || ''}
+                  onChange={(event) => setDraft((current) => ({
+                    ...current,
+                    expectedAnnualRevenue: formatAnnualRevenue(event.target.value),
+                  }))}
+                  onBlur={() => setDraft((current) => ({
+                    ...current,
+                    expectedAnnualRevenue: finishAnnualRevenue(current.expectedAnnualRevenue),
+                  }))}
+                />
+              </label>
               <fieldset className="service-field">
                 <legend>Service <b className="req">*</b></legend>
                 {SERVICES.map((service) => (
@@ -624,7 +642,7 @@ export function CreateOnboarding({
                     </div>
                   )}
                   {draft.hosting === 'dayross' && draft.sftp && <HostingRequest key="dayross-sftp-request" />}
-                  {draft.sftp && (
+                  {draft.hosting === 'customer' && draft.sftp && (
                     <div className="cols sub">
                       {SFTP_FIELDS.map((field) => (
                         <TextField
@@ -656,7 +674,6 @@ export function CreateOnboarding({
                 <>
                   <div className="cols">
                     <TextField label="Name of person completing this form" value={auth.name} readOnly />
-                    <TextField label="Title" value={auth.title} onChange={(value) => setAuth('title', value)} />
                     <TextField label="Company" value={auth.company} readOnly />
                     <label className="field locked">
                       <span>Date</span>
@@ -664,7 +681,7 @@ export function CreateOnboarding({
                     </label>
                   </div>
                   <fieldset>
-                    <legend>Do you give authorization for your payment house to be set up on API/EDI and any other services Day &amp; Ross offers to get backup documents?</legend>
+                    <legend>Has this customer already passed the probationary period against their tariff contract?</legend>
                     {['YES', 'NO'].map((value) => (
                       <label key={value} className="inline">
                         <input
@@ -712,6 +729,7 @@ function ReviewSummary({ draft }) {
         {row('Customer email', draft.customerEmail)}
         {row('Technow Request ID', draft.technowRequestId)}
         {row('Type', draft.type)}
+        {row('Expected annual revenue', draft.expectedAnnualRevenue)}
         {row('Service', services)}
       </tbody></table></section>
       <section className="card"><h2>Customer details</h2><table><tbody>
@@ -744,16 +762,15 @@ function ReviewSummary({ draft }) {
           {row('Hosting', draft.hosting === 'dayross' ? 'Day & Ross (Preferred)' : draft.hosting === 'customer' ? 'Customer' : '—')}
           {(draft.hosting === 'dayross' || draft.hosting === 'customer') && row('Method', [draft.sftp && 'SFTP (Preferred)', draft.as2 && 'AS2'].filter(Boolean).join(', ') || '—')}
           {(draft.hosting === 'dayross' || draft.hosting === 'customer') && draft.as2 && row('AS2 certificate', draft.as2Certificate?.name || '—')}
-          {(draft.hosting === 'dayross' || draft.hosting === 'customer') && draft.sftp && SFTP_FIELDS.map((field) => (
+          {draft.hosting === 'customer' && draft.sftp && SFTP_FIELDS.map((field) => (
             row(field.label, field.name === 'password' ? '••••••••' : draft.sftpDetails?.[field.name])
           ))}
         </tbody></table></section>
       )}
       <section className="card"><h2>Authorization</h2><table><tbody>
         {row('Completed by', auth.name)}
-        {row('Title', auth.title)}
         {row('Company', auth.company)}
-        {row('Payment house authorized for API/EDI & other services', auth.paymentHouseAuth)}
+        {row('Passed probationary period against tariff contract', auth.paymentHouseAuth)}
         {row('Comments', auth.comments)}
         {row('Date', auth.date)}
       </tbody></table></section>
