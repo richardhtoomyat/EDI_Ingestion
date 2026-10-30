@@ -169,7 +169,7 @@ function validate(s, visible = { main: true, logistics: true, request: true }) {
   if (s.type !== 'Revised') {
     if (s.hosting !== 'dayross' && s.hosting !== 'customer') {
       e.other.comm = 'Select Day & Ross or Customer hosting'
-    } else if (s.hosting === 'customer' && !s.as2 && !s.sftp) {
+    } else if ((s.hosting === 'customer' || s.hosting === 'dayross') && !s.as2 && !s.sftp) {
       e.other.comm = 'Select AS2 or SFTP'
     }
   }
@@ -365,10 +365,10 @@ function Summary({ state, onEdit }) {
     state.normalStatuses.length ? `214 normal statuses: ${statusCodeText(state.normalStatuses, NORMAL_STATUSES, state.normalCodes).replaceAll('\n', ', ')}` : '',
     state.exceptionStatuses.length ? `214 exception statuses: ${statusCodeText(state.exceptionStatuses, EXCEPTION_STATUSES, state.exceptionCodes).replaceAll('\n', ', ')}` : '',
     `Developer Kickoff Call: ${[...state.kickoffWeeks].sort().map(formatWeek).join('; ')}`,
-    `Hosting: ${state.hosting === 'dayross' ? 'Day & Ross' : state.hosting === 'customer' ? 'Customer' : '—'}`,
-    state.hosting === 'customer' ? `Method: ${[state.as2 && 'AS2', state.sftp && 'SFTP'].filter(Boolean).join(', ') || '—'}` : '',
-    state.hosting === 'customer' && state.as2 ? `AS2 certificate: ${state.as2Certificate?.name || '—'}` : '',
-    state.hosting === 'customer' && state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
+    `Hosting: ${state.hosting === 'dayross' ? 'Day & Ross (Preferred)' : state.hosting === 'customer' ? 'Customer' : '—'}`,
+    (state.hosting === 'customer' || state.hosting === 'dayross') ? `Method: ${[state.sftp && 'SFTP (Preferred)', state.as2 && 'AS2'].filter(Boolean).join(', ') || '—'}` : '',
+    (state.hosting === 'customer' || state.hosting === 'dayross') && state.as2 ? `AS2 certificate: ${state.as2Certificate?.name || '—'}` : '',
+    (state.hosting === 'customer' || state.hosting === 'dayross') && state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
     `Completed by: ${state.authorization.name}, ${state.authorization.title}, ${state.authorization.company} on ${state.authorization.date}`,
     '(SFTP password intentionally omitted - share it securely.)',
   ].filter(Boolean).join('\n')
@@ -405,10 +405,10 @@ function Summary({ state, onEdit }) {
       </tbody></table></section>
       {state.type !== 'Revised' && (
         <section className="card"><h2>EDI Communication</h2><table><tbody>
-          {row('Hosting', state.hosting === 'dayross' ? 'Day & Ross' : state.hosting === 'customer' ? 'Customer' : '—')}
-          {state.hosting === 'customer' && row('Method', [state.as2 && 'AS2', state.sftp && 'SFTP'].filter(Boolean).join(', ') || '—')}
-          {state.hosting === 'customer' && state.as2 && row('AS2 certificate', state.as2Certificate?.name || '—')}
-          {state.hosting === 'customer' && state.sftp && SFTP_FIELDS.map((f) => row(f.label, f.name === 'password' ? '••••••••' : state.sftpDetails[f.name]))}
+          {row('Hosting', state.hosting === 'dayross' ? 'Day & Ross (Preferred)' : state.hosting === 'customer' ? 'Customer' : '—')}
+          {(state.hosting === 'customer' || state.hosting === 'dayross') && row('Method', [state.sftp && 'SFTP (Preferred)', state.as2 && 'AS2'].filter(Boolean).join(', ') || '—')}
+          {(state.hosting === 'customer' || state.hosting === 'dayross') && state.as2 && row('AS2 certificate', state.as2Certificate?.name || '—')}
+          {(state.hosting === 'customer' || state.hosting === 'dayross') && state.sftp && SFTP_FIELDS.map((f) => row(f.label, f.name === 'password' ? '••••••••' : state.sftpDetails[f.name]))}
         </tbody></table></section>
       )}
       <section className="card"><h2>Authorization</h2><table><tbody>
@@ -453,7 +453,7 @@ export default function App({ prefill, token }) {
     pollRef.current = null
   }
   useEffect(() => () => stopOutboundWatch(), [])
-  useEffect(() => { if (state.hosting !== 'customer' || !state.sftp) stopOutboundWatch() }, [state.hosting, state.sftp])
+  useEffect(() => { if ((state.hosting !== 'customer' && state.hosting !== 'dayross') || !state.sftp) stopOutboundWatch() }, [state.hosting, state.sftp])
 
   const postSftp = async (action) => {
     const res = await fetch('/api/test-sftp', {
@@ -797,7 +797,7 @@ export default function App({ prefill, token }) {
           <fieldset disabled={fromAgent && Boolean(prefill?.hosting) && agentLocked} className={fromAgent && Boolean(prefill?.hosting) && agentLocked ? 'locked-fields' : undefined}>
             <legend>Hosting</legend>
             {[
-              { value: 'dayross', label: 'Day & Ross' },
+              { value: 'dayross', label: 'Day & Ross (Preferred)' },
               { value: 'customer', label: 'Customer' },
             ].map((option) => (
               <label key={option.value} className="inline">
@@ -816,23 +816,14 @@ export default function App({ prefill, token }) {
               </label>
             ))}
             {err('other').comm && <em role="alert">{err('other').comm}</em>}
-            {state.hosting === 'dayross' && <HostingRequest key="dayross-request" />}
-            {state.hosting === 'customer' && (
+            {(state.hosting === 'dayross' || state.hosting === 'customer') && (
               <>
                 <fieldset className="sub">
                   <legend>Method</legend>
                   <label className="inline">
                     <input
                       type="radio"
-                      name="customer-method"
-                      checked={Boolean(state.as2)}
-                      onChange={() => setState((current) => ({ ...current, as2: true, sftp: false }))}
-                    /> AS2
-                  </label>
-                  <label className="inline">
-                    <input
-                      type="radio"
-                      name="customer-method"
+                      name="edi-method"
                       checked={Boolean(state.sftp)}
                       onChange={() => setState((current) => ({
                         ...current,
@@ -840,7 +831,15 @@ export default function App({ prefill, token }) {
                         sftp: true,
                         as2Certificate: null,
                       }))}
-                    /> SFTP
+                    /> SFTP (Preferred)
+                  </label>
+                  <label className="inline">
+                    <input
+                      type="radio"
+                      name="edi-method"
+                      checked={Boolean(state.as2)}
+                      onChange={() => setState((current) => ({ ...current, as2: true, sftp: false }))}
+                    /> AS2
                   </label>
                 </fieldset>
                 {state.as2 && (
@@ -853,6 +852,7 @@ export default function App({ prefill, token }) {
                 )}
                 {state.sftp && (
                   <>
+                    {state.hosting === 'dayross' && <HostingRequest key="dayross-sftp-request" />}
                     <div className="cols sub">
                       <Fields prefix="sftp" fields={SFTP_FIELDS} values={state.sftpDetails} onChange={setGroup('sftpDetails')} />
                     </div>

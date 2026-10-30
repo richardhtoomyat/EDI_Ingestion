@@ -570,7 +570,7 @@ export function CreateOnboarding({
               <fieldset>
                 <legend>Hosting</legend>
                 {[
-                  { value: 'dayross', label: 'Day & Ross' },
+                  { value: 'dayross', label: 'Day & Ross (Preferred)' },
                   { value: 'customer', label: 'Customer' },
                 ].map((option) => (
                   <label key={option.value} className="inline">
@@ -589,23 +589,14 @@ export function CreateOnboarding({
                   </label>
                 ))}
               </fieldset>
-              {draft.hosting === 'dayross' && <HostingRequest key="dayross-request" />}
-              {draft.hosting === 'customer' && (
+              {(draft.hosting === 'dayross' || draft.hosting === 'customer') && (
                 <>
                   <fieldset className="sub">
                     <legend>Method</legend>
                     <label className="inline">
                       <input
                         type="radio"
-                        name="customer-method"
-                        checked={Boolean(draft.as2)}
-                        onChange={() => setDraft((current) => ({ ...current, as2: true, sftp: false }))}
-                      /> AS2
-                    </label>
-                    <label className="inline">
-                      <input
-                        type="radio"
-                        name="customer-method"
+                        name="edi-method"
                         checked={Boolean(draft.sftp)}
                         onChange={() => setDraft((current) => ({
                           ...current,
@@ -613,7 +604,15 @@ export function CreateOnboarding({
                           sftp: true,
                           as2Certificate: null,
                         }))}
-                      /> SFTP
+                      /> SFTP (Preferred)
+                    </label>
+                    <label className="inline">
+                      <input
+                        type="radio"
+                        name="edi-method"
+                        checked={Boolean(draft.as2)}
+                        onChange={() => setDraft((current) => ({ ...current, as2: true, sftp: false }))}
+                      /> AS2
                     </label>
                   </fieldset>
                   {draft.as2 && (
@@ -624,6 +623,7 @@ export function CreateOnboarding({
                       />
                     </div>
                   )}
+                  {draft.hosting === 'dayross' && draft.sftp && <HostingRequest key="dayross-sftp-request" />}
                   {draft.sftp && (
                     <div className="cols sub">
                       {SFTP_FIELDS.map((field) => (
@@ -741,10 +741,10 @@ function ReviewSummary({ draft }) {
       </tbody></table></section>
       {draft.type !== 'Revised' && (
         <section className="card"><h2>EDI Communication</h2><table><tbody>
-          {row('Hosting', draft.hosting === 'dayross' ? 'Day & Ross' : draft.hosting === 'customer' ? 'Customer' : '—')}
-          {draft.hosting === 'customer' && row('Method', [draft.as2 && 'AS2', draft.sftp && 'SFTP'].filter(Boolean).join(', ') || '—')}
-          {draft.hosting === 'customer' && draft.as2 && row('AS2 certificate', draft.as2Certificate?.name || '—')}
-          {draft.hosting === 'customer' && draft.sftp && SFTP_FIELDS.map((field) => (
+          {row('Hosting', draft.hosting === 'dayross' ? 'Day & Ross (Preferred)' : draft.hosting === 'customer' ? 'Customer' : '—')}
+          {(draft.hosting === 'dayross' || draft.hosting === 'customer') && row('Method', [draft.sftp && 'SFTP (Preferred)', draft.as2 && 'AS2'].filter(Boolean).join(', ') || '—')}
+          {(draft.hosting === 'dayross' || draft.hosting === 'customer') && draft.as2 && row('AS2 certificate', draft.as2Certificate?.name || '—')}
+          {(draft.hosting === 'dayross' || draft.hosting === 'customer') && draft.sftp && SFTP_FIELDS.map((field) => (
             row(field.label, field.name === 'password' ? '••••••••' : draft.sftpDetails?.[field.name])
           ))}
         </tbody></table></section>

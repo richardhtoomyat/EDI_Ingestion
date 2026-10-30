@@ -94,11 +94,11 @@ export function mergePrefill(draft) {
     developer: { ...base.developer, ...(draft.developer || {}) },
     sets: Array.isArray(draft.sets) ? draft.sets.filter((code) => SET_CODES.has(code)) : [],
     hosting: normalizeHosting(draft),
-    as2: Boolean(draft.as2) && normalizeHosting(draft) === 'customer',
+    as2: Boolean(draft.as2) && Boolean(normalizeHosting(draft)),
     as2Certificate: draft.as2Certificate && typeof draft.as2Certificate === 'object'
       ? draft.as2Certificate
       : null,
-    sftp: Boolean(draft.sftp) && normalizeHosting(draft) === 'customer',
+    sftp: Boolean(draft.sftp) && Boolean(normalizeHosting(draft)),
     sftpDetails: { ...base.sftpDetails, ...(draft.sftpDetails || {}) },
     authorization: { ...base.authorization, ...(draft.authorization || {}) },
     normalStatuses: Array.isArray(draft.normalStatuses) ? draft.normalStatuses : [],
