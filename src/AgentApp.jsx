@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { DEVELOPER_FIELDS, NORMAL_STATUSES, EXCEPTION_STATUSES, SERVICES, SFTP_FIELDS, TRANSACTION_SETS } from './formConfig.js'
 import { Shell, Chevron, EDI_EMAIL } from './chrome.jsx'
 import {
-  emptyAuthorization, emptyCustomerDetails, emptyDeveloper, emptyDraft, loadOnboardings, padAs400, saveOnboarding, traderLabel, updateOnboarding,
+  emptyAuthorization, emptyCustomerDetails, emptyDeveloper, emptyDraft, loadOnboardings, padAs400, saveOnboarding, updateOnboarding,
 } from './onboardingLink.js'
 import AddressField from './AddressField.jsx'
 import RegionField from './RegionField.jsx'
@@ -158,6 +158,8 @@ export function CreateOnboarding({
     const base = record ? structuredClone(record.draft) : emptyDraft()
     return {
       ...base,
+      traderIdQa: record?.traderIdQa || base.traderIdQa || '',
+      traderIdProd: record?.traderIdProd || base.traderIdProd || '',
       authorization: {
         ...emptyAuthorization(),
         ...(base.authorization || {}),
@@ -192,8 +194,8 @@ export function CreateOnboarding({
       ...draft,
       customerEmail: email,
       technowRequestId,
-      traderIdQa: record?.traderIdQa || draft.traderIdQa || '',
-      traderIdProd: record?.traderIdProd || draft.traderIdProd || '',
+      traderIdQa: draft.type === 'Revised' ? String(draft.traderIdQa || '').trim() : (record?.traderIdQa || ''),
+      traderIdProd: draft.type === 'Revised' ? String(draft.traderIdProd || '').trim() : (record?.traderIdProd || ''),
       normalStatuses: with214 ? (draft.normalStatuses || []) : [],
       normalCodes: with214 ? (draft.normalCodes || {}) : {},
       normalOpen: with214 ? (draft.normalOpen || []) : [],
@@ -253,6 +255,10 @@ export function CreateOnboarding({
     }
     if (!Array.isArray(draft.services) || draft.services.length === 0) {
       setError('Select at least one service.')
+      return false
+    }
+    if (draft.type === 'Revised' && (!String(draft.traderIdQa || '').trim() || !String(draft.traderIdProd || '').trim())) {
+      setError('Enter Trader ID (QA) and Trader ID (Prod).')
       return false
     }
     setError('')
@@ -391,17 +397,19 @@ export function CreateOnboarding({
                 onChange={(technowRequestId) => setDraft((current) => ({ ...current, technowRequestId }))}
               />
             </div>
-            {record && (
+            {draft.type === 'Revised' && (
               <div className="cols">
                 <TextField
                   label="Trader ID (QA)"
-                  value={traderLabel(record.traderIdQa || draft.traderIdQa)}
-                  readOnly
+                  required
+                  value={draft.traderIdQa || ''}
+                  onChange={(traderIdQa) => setDraft((current) => ({ ...current, traderIdQa }))}
                 />
                 <TextField
                   label="Trader ID (Prod)"
-                  value={traderLabel(record.traderIdProd || draft.traderIdProd)}
-                  readOnly
+                  required
+                  value={draft.traderIdProd || ''}
+                  onChange={(traderIdProd) => setDraft((current) => ({ ...current, traderIdProd }))}
                 />
               </div>
             )}
@@ -674,7 +682,6 @@ export function CreateOnboarding({
                 <>
                   <div className="cols">
                     <TextField label="Name of person completing this form" value={auth.name} readOnly />
-                    <TextField label="Company" value={auth.company} readOnly />
                     <label className="field locked">
                       <span>Date</span>
                       <input type="date" value={auth.date} readOnly />
@@ -729,6 +736,8 @@ function ReviewSummary({ draft }) {
         {row('Customer email', draft.customerEmail)}
         {row('Technow Request ID', draft.technowRequestId)}
         {row('Type', draft.type)}
+        {draft.type === 'Revised' && row('Trader ID (QA)', draft.traderIdQa)}
+        {draft.type === 'Revised' && row('Trader ID (Prod)', draft.traderIdProd)}
         {row('Expected annual revenue', draft.expectedAnnualRevenue)}
         {row('Service', services)}
       </tbody></table></section>
@@ -769,7 +778,6 @@ function ReviewSummary({ draft }) {
       )}
       <section className="card"><h2>Authorization</h2><table><tbody>
         {row('Completed by', auth.name)}
-        {row('Company', auth.company)}
         {row('Passed probationary period against tariff contract', auth.paymentHouseAuth)}
         {row('Comments', auth.comments)}
         {row('Date', auth.date)}

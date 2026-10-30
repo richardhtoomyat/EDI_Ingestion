@@ -369,7 +369,7 @@ function Summary({ state, onEdit }) {
     (state.hosting === 'customer' || state.hosting === 'dayross') ? `Method: ${[state.sftp && 'SFTP (Preferred)', state.as2 && 'AS2'].filter(Boolean).join(', ') || '—'}` : '',
     (state.hosting === 'customer' || state.hosting === 'dayross') && state.as2 ? `AS2 certificate: ${state.as2Certificate?.name || '—'}` : '',
     state.hosting === 'customer' && state.sftp ? `SFTP: ${sftpSafe.server} port ${sftpSafe.port}, user ${sftpSafe.username}, qualifier ${sftpSafe.qualifier}, dirs ${sftpSafe.directories}` : '',
-    `Completed by: ${state.authorization.name}, ${state.authorization.company} on ${state.authorization.date}`,
+    `Completed by: ${state.authorization.name} on ${state.authorization.date}`,
     '(SFTP password intentionally omitted - share it securely.)',
   ].filter(Boolean).join('\n')
 
@@ -413,7 +413,6 @@ function Summary({ state, onEdit }) {
       )}
       <section className="card"><h2>Authorization</h2><table><tbody>
         {row('Completed by', state.authorization.name)}
-        {row('Company', state.authorization.company)}
         {row('Passed probationary period against tariff contract', state.authorization.paymentHouseAuth)}
         {row('Comments', state.authorization.comments)}
         {row('Date', state.authorization.date)}
@@ -879,7 +878,6 @@ export default function App({ prefill, token }) {
             <div className="cols">
               <Fields prefix="auth" fields={[
                 { name: 'name', label: 'Name of person completing this form', required: true },
-                { name: 'company', label: 'Company' },
               ]} values={state.authorization} onChange={setGroup('authorization')} errors={err('authorization')} />
               <label className="field"><span>Date</span>
                 <input type="date" value={state.authorization.date} onChange={(e) => setGroup('authorization')('date', e.target.value)} />

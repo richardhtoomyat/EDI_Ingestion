@@ -103,6 +103,14 @@ function pickTrader(source = {}) {
   }
 }
 
+function traderForSave(draft, fallback = { traderIdQa: '', traderIdProd: '' }) {
+  if (draft?.type !== 'Revised') return fallback
+  return {
+    traderIdQa: String(draft.traderIdQa || '').trim(),
+    traderIdProd: String(draft.traderIdProd || '').trim(),
+  }
+}
+
 function withTrader(draft = {}, trader = {}) {
   return {
     ...draft,
@@ -341,7 +349,8 @@ export default async function handler(req, res) {
       if (!technowRequestId) {
         return res.status(400).json({ ok: false, error: 'Technow Request ID is required' })
       }
-      const prefill = withTrader({ ...draft, technowRequestId }, { traderIdQa: '', traderIdProd: '' })
+      const trader = traderForSave(draft)
+      const prefill = withTrader({ ...draft, technowRequestId }, trader)
       if (!prefill.authorization?.name) {
         prefill.authorization = {
           ...(prefill.authorization || {}),
@@ -354,8 +363,8 @@ export default async function handler(req, res) {
         company_name: companyFromDraft(draft, email),
         customer_email: email,
         prefill,
-        trader_id_qa: '',
-        trader_id_prod: '',
+        trader_id_qa: trader.traderIdQa,
+        trader_id_prod: trader.traderIdProd,
         ...lastModifiedFields(profile),
       }
       try {
@@ -569,7 +578,10 @@ export default async function handler(req, res) {
       if (!email) return res.status(400).json({ ok: false, error: 'Customer email is required' })
       if (!technowRequestId) return res.status(400).json({ ok: false, error: 'Technow Request ID is required' })
       const existing = await loadOnboarding(id)
-      const trader = pickTrader({ ...(existing.prefill || {}), trader_id_qa: existing.trader_id_qa, trader_id_prod: existing.trader_id_prod })
+      const trader = traderForSave(
+        draft,
+        pickTrader({ ...(existing.prefill || {}), trader_id_qa: existing.trader_id_qa, trader_id_prod: existing.trader_id_prod }),
+      )
       const prefill = withTrader({ ...draft, technowRequestId }, trader)
       try {
         const nextRow = {
