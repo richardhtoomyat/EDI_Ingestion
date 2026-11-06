@@ -4,6 +4,7 @@ import App from './App.jsx'
 import AuthGate from './AuthGate.jsx'
 import { InvalidLink, SalesFormPreview } from './AgentApp.jsx'
 import { EdiDashboardPreview } from './EdiDashboard.jsx'
+import { IamDashboardPreview } from './IamDashboard.jsx'
 import { customerRoute, readCustomerDraft } from './onboardingLink.js'
 import './styles.css'
 
@@ -20,13 +21,13 @@ import './styles.css'
 function Root() {
   const route = customerRoute()
   const [screen, setScreen] = useState(
-    route.kind === 'agent' || route.kind === 'salePreview' || route.kind === 'ediPreview' ? route.kind : 'loading',
+    route.kind === 'agent' || route.kind === 'salePreview' || route.kind === 'ediPreview' || route.kind === 'iamPreview' ? route.kind : 'loading',
   )
   const [draft, setDraft] = useState(null)
   const [token, setToken] = useState('')
 
   useEffect(() => {
-    if (route.kind === 'agent' || route.kind === 'salePreview' || route.kind === 'ediPreview') return
+    if (route.kind === 'agent' || route.kind === 'salePreview' || route.kind === 'ediPreview' || route.kind === 'iamPreview') return
     if (route.kind === 'invalid') {
       setScreen('invalid')
       return
@@ -56,6 +57,7 @@ function Root() {
 
   if (screen === 'salePreview') return <SalesFormPreview />
   if (screen === 'ediPreview') return <EdiDashboardPreview />
+  if (screen === 'iamPreview') return <IamDashboardPreview />
   if (screen === 'agent') return <AuthGate />
   if (screen === 'invalid') return <InvalidLink />
   if (screen === 'loading') return <p className="page intro">Loading your onboarding…</p>

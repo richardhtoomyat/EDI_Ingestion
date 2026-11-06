@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Shell, Chevron } from './chrome.jsx'
+import { Shell, Chevron, BrandName } from './chrome.jsx'
 import logo from './assets/logo.png'
 import { AccountPage, AdministrationPage, isAdminProfile } from './AccountMenu.jsx'
 import AgentApp from './AgentApp.jsx'
@@ -67,7 +67,7 @@ function SignInCard({ error, busy, onMicrosoft, onSignIn }) {
     <main className="signin">
       <form className="signin-form" onSubmit={submit} noValidate>
         <img className="signin-logo" src={logo} alt="Day & Ross" />
-        <h1>EDI<span>Conveyor</span></h1>
+        <h1 className="signin-brand"><BrandName /></h1>
         {error && <div className="banner err" role="alert">{error}</div>}
         <button type="button" className="ms-btn" disabled={busy} onClick={onMicrosoft}>
           <MicrosoftMark />

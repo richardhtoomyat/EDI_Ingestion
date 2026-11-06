@@ -3,9 +3,18 @@ import { AccountMenu } from './AccountMenu.jsx'
 
 export const EDI_EMAIL = 'edirequest@dayandrossinc.ca'
 
+export function BrandName({ className = '' }) {
+  return (
+    <span className={`brand-name ${className}`.trim()}>
+      EDI<span>Conveyor</span>
+    </span>
+  )
+}
+
 export function SiteHeader({
   title = 'EDI Customer Onboarding',
   subtitle,
+  brand = false,
   onSignOut,
   profile,
   onAccount,
@@ -15,11 +24,15 @@ export function SiteHeader({
   nav,
 }) {
   return (
-    <header className="site-header no-print">
+    <header className={`site-header no-print${brand ? ' site-header-brand' : ''}`}>
       <div className="site-header-inner">
-        <img className="logo" src={logo} alt="Day & Ross" />
+        <img className={`logo${brand ? ' logo-brand' : ''}`} src={logo} alt="Day & Ross" />
         <div className="site-title-block">
-          <span className="site-title">{title}</span>
+          {brand ? (
+            <BrandName className="brand-name-header" />
+          ) : (
+            <span className="site-title">{title}</span>
+          )}
           {subtitle && <span className="site-subtitle">{subtitle}</span>}
         </div>
         {nav && <div className="site-header-nav">{nav}</div>}
@@ -45,6 +58,7 @@ export function SiteHeader({
 export function Shell({
   title,
   subtitle,
+  brand = false,
   onSignOut,
   profile,
   onAccount,
@@ -59,6 +73,7 @@ export function Shell({
       <SiteHeader
         title={title}
         subtitle={subtitle}
+        brand={brand}
         onSignOut={onSignOut}
         profile={profile}
         onAccount={onAccount}
